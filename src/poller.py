@@ -258,7 +258,7 @@ class Poller:
             "source": f"{event.platform}:{event.data_type}",
             "sourcetype": event.sourcetype,
             "index": event.index,
-            "event": event.model_dump(mode="json"),
+            "event": event.model_dump(mode="json", exclude={"timestamp"}),
         }
 
     @staticmethod
