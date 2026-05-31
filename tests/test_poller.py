@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import sys
@@ -5,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.models import PlatformRule, PollingEvent, SourceEndpoint, SiteConfig
+from src.models import PlatformRule, PollingEvent, SourceEndpoint
 from src.spool import SpoolManager
 
 
@@ -93,31 +94,36 @@ class TestDictToHECLine:
 
 class TestCreateClient:
     def test_hmc_client(self) -> None:
-        from src.poller import HMCClient, Poller as PollerCls
+        from src.poller import HMCClient
+        from src.poller import Poller as PollerCls
         poller = PollerCls.__new__(PollerCls)
         endpoint = SourceEndpoint(name="test-ep", url="https://test.example.com", platform="hmc", site="primary", auth_type="basic", creds_vault_path="secret/test")
         assert isinstance(poller._create_client(endpoint), HMCClient)
 
     def test_ds8k_client(self) -> None:
-        from src.poller import DS8000Client, Poller as PollerCls
+        from src.poller import DS8000Client
+        from src.poller import Poller as PollerCls
         poller = PollerCls.__new__(PollerCls)
         endpoint = SourceEndpoint(name="test-ep", url="https://test.example.com", platform="ds", site="main", auth_type="basic", creds_vault_path="secret/test")
         assert isinstance(poller._create_client(endpoint), DS8000Client)
 
     def test_ds8000_client(self) -> None:
-        from src.poller import DS8000Client, Poller as PollerCls
+        from src.poller import DS8000Client
+        from src.poller import Poller as PollerCls
         poller = PollerCls.__new__(PollerCls)
         endpoint = SourceEndpoint(name="test-ep", url="https://test.example.com", platform="ds8k", site="main", auth_type="basic", creds_vault_path="secret/test")
         assert isinstance(poller._create_client(endpoint), DS8000Client)
 
     def test_csm_client(self) -> None:
-        from src.poller import CSMClient, Poller as PollerCls
+        from src.poller import CSMClient
+        from src.poller import Poller as PollerCls
         poller = PollerCls.__new__(PollerCls)
         endpoint = SourceEndpoint(name="test-ep", url="https://test.example.com", platform="csm", site="main", auth_type="basic", creds_vault_path="secret/test")
         assert isinstance(poller._create_client(endpoint), CSMClient)
 
     def test_ts7700_client(self) -> None:
-        from src.poller import Poller as PollerCls, TS7700Client
+        from src.poller import Poller as PollerCls
+        from src.poller import TS7700Client
         poller = PollerCls.__new__(PollerCls)
         endpoint = SourceEndpoint(name="test-ep", url="https://test.example.com", platform="ts7700", site="primary", auth_type="basic", creds_vault_path="secret/test")
         assert isinstance(poller._create_client(endpoint), TS7700Client)
@@ -555,8 +561,8 @@ class TestPollerRunOnce:
             mock_zhmc.Session.return_value = MagicMock()
 
             with patch.dict(sys.modules, {"zhmcclient": mock_zhmc}):
-                from src.poller import Poller
                 from src.models import PlatformRule, SiteConfig, SourceEndpoint
+                from src.poller import Poller
 
                 p = Poller(platform="hmc", rules_dir="tests/fixtures/rules", spool_dir=tmp_spool_dir)
 
@@ -581,14 +587,12 @@ class TestPollerRunOnce:
 
     def test_run_once_no_active_endpoints(self, tmp_spool_dir: str) -> None:
         from src.poller import Poller
-        from src.rules_loader import RulesLoader
         p = Poller(platform="hmc", rules_dir="tests/fixtures/rules", spool_dir=tmp_spool_dir)
         p.source_selector.get_active_endpoints = MagicMock(return_value=[])
         assert p.run_once() == 0
 
     def test_run_forever_keyboard_interrupt(self, tmp_spool_dir: str) -> None:
         from src.poller import Poller
-        from src.rules_loader import RulesLoader
         p = Poller(platform="hmc", rules_dir="tests/fixtures/rules", spool_dir=tmp_spool_dir)
         p.health_checker = MagicMock()
         p.source_selector.get_active_endpoints = MagicMock(return_value=[])
@@ -598,7 +602,7 @@ class TestPollerRunOnce:
         import threading
         import time
 
-        stop_called = threading.Event()
+        threading.Event()
 
         def stop_after_delay():
             time.sleep(0.1)
@@ -608,10 +612,8 @@ class TestPollerRunOnce:
         t = threading.Thread(target=stop_after_delay, daemon=True)
 
         t.start()
-        try:
+        with contextlib.suppress(KeyboardInterrupt):
             p.run_forever(interval_seconds=300)
-        except KeyboardInterrupt:
-            pass
         p.health_checker.start.assert_called_once()
         p.health_checker.stop.assert_called_once()
 
@@ -619,7 +621,6 @@ class TestPollerRunOnce:
 class TestPollerInit:
     def test_basic_initialization(self, tmp_spool_dir: str) -> None:
         from src.poller import Poller
-        from src.rules_loader import RulesLoader
         p = Poller(platform="hmc", rules_dir="tests/fixtures/rules", spool_dir=tmp_spool_dir)
         assert p.platform == "hmc"
         assert p.health_checker is not None
@@ -629,8 +630,8 @@ class TestPollerInit:
 
 class TestBaseAPIClient:
     def test_query_not_implemented(self) -> None:
-        from src.poller import BaseAPIClient
         from src.models import SourceEndpoint
+        from src.poller import BaseAPIClient
         ep = SourceEndpoint(name="test", url="https://example.com", platform="hmc", site="primary", auth_type="basic", creds_vault_path="secret/test")
         client = BaseAPIClient(ep)
         with pytest.raises(NotImplementedError):
@@ -639,12 +640,12 @@ class TestBaseAPIClient:
 
 class TestPollerMain:
     def test_main_sets_up_and_starts(self, tmp_spool_dir: str) -> None:
-        with patch.dict(os.environ, {"PLATFORM": "hmc", "RULES_DIR": "tests/fixtures/rules", "SPOOL_DIR": tmp_spool_dir, "HEALTH_PORT": "9191", "POLL_INTERVAL_SECONDS": "1"}):
-            with patch("src.poller.uvicorn") as mock_uvicorn:
-                with patch("src.poller.Poller.run_forever") as mock_run:
-                    mock_run.side_effect = SystemExit
-                    from src.poller import main as poller_main
-                    try:
-                        poller_main()
-                    except (SystemExit, KeyboardInterrupt):
-                        pass
+        with (
+            patch.dict(os.environ, {"PLATFORM": "hmc", "RULES_DIR": "tests/fixtures/rules", "SPOOL_DIR": tmp_spool_dir, "HEALTH_PORT": "9191", "POLL_INTERVAL_SECONDS": "1"}),
+            patch("src.poller.uvicorn"),
+            patch("src.poller.Poller.run_forever") as mock_run,
+        ):
+            mock_run.side_effect = SystemExit
+            from src.poller import main as poller_main
+            with contextlib.suppress(SystemExit, KeyboardInterrupt):
+                poller_main()

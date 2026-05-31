@@ -1,3 +1,4 @@
+import contextlib
 import os
 import threading
 from unittest.mock import MagicMock, patch
@@ -90,15 +91,12 @@ class TestRunForever:
 
         sender.spool_manager.list_pending = counting_list
 
-        try:
+        with contextlib.suppress(KeyboardInterrupt):
             sender.run_forever()
-        except KeyboardInterrupt:
-            pass
 
         sender.spool_manager.list_pending = original_spool
 
     def test_empty_loop_handles_exception(self, sender: Sender) -> None:
-        import time
 
         call_count = [0]
         original = sender.spool_manager.list_pending
@@ -113,10 +111,8 @@ class TestRunForever:
 
         sender.spool_manager.list_pending = flaky_list
 
-        try:
+        with contextlib.suppress(KeyboardInterrupt):
             sender.run_forever()
-        except KeyboardInterrupt:
-            pass
 
         sender.spool_manager.list_pending = original
         assert call_count[0] >= 3
@@ -146,10 +142,8 @@ class TestRunForever:
         sender._last_cleanup = time.monotonic() - 4000
         sender.spool_manager.list_pending = pending_list
 
-        try:
+        with contextlib.suppress(KeyboardInterrupt):
             sender.run_forever()
-        except KeyboardInterrupt:
-            pass
 
         sender.cleanup = orig_cleanup
         sender.spool_manager.list_pending = original
@@ -157,33 +151,37 @@ class TestRunForever:
 
 class TestSenderInit:
     def test_env_vars_used(self, spool_manager) -> None:
-        with patch.dict(os.environ, {"SPLUNK_HEC_URL": "https://custom.example.com:8088", "SPLUNK_HEC_TOKEN": "env-token"}):
-            with patch("src.sender.SplunkHECClient") as mock_hec:
-                mock_hec.return_value = MagicMock()
-                s = Sender(spool_dir=spool_manager.spool_dir)
-                assert s.hec_url == "https://custom.example.com:8088"
-                assert s.hec_token == "env-token"
-                s.hec_client.close()
+        with (
+            patch.dict(os.environ, {"SPLUNK_HEC_URL": "https://custom.example.com:8088", "SPLUNK_HEC_TOKEN": "env-token"}),
+            patch("src.sender.SplunkHECClient") as mock_hec,
+        ):
+            mock_hec.return_value = MagicMock()
+            s = Sender(spool_dir=spool_manager.spool_dir)
+            assert s.hec_url == "https://custom.example.com:8088"
+            assert s.hec_token == "env-token"
+            s.hec_client.close()
 
     def test_explicit_params_override_env(self, spool_manager) -> None:
-        with patch.dict(os.environ, {"SPLUNK_HEC_URL": "https://env.example.com:8088"}):
-            with patch("src.sender.SplunkHECClient") as mock_hec:
-                mock_hec.return_value = MagicMock()
-                s = Sender(spool_dir=spool_manager.spool_dir, hec_url="https://explicit.example.com:8088")
-                assert s.hec_url == "https://explicit.example.com:8088"
-                s.hec_client.close()
+        with (
+            patch.dict(os.environ, {"SPLUNK_HEC_URL": "https://env.example.com:8088"}),
+            patch("src.sender.SplunkHECClient") as mock_hec,
+        ):
+            mock_hec.return_value = MagicMock()
+            s = Sender(spool_dir=spool_manager.spool_dir, hec_url="https://explicit.example.com:8088")
+            assert s.hec_url == "https://explicit.example.com:8088"
+            s.hec_client.close()
 
 
 class TestSenderMain:
     def test_main_sets_up_sender(self, tmp_path) -> None:
-        with patch.dict(os.environ, {"SPOOL_DIR": str(tmp_path / "spool"), "SPLUNK_HEC_URL": "https://splunk.test:8088", "SPLUNK_HEC_TOKEN": "test-token", "HEALTH_PORT": "9191"}):
-            with patch("src.sender.uvicorn") as mock_uvicorn:
-                with patch("src.sender.SplunkHECClient") as mock_hec:
-                    mock_hec.return_value = MagicMock()
-                    with patch("src.sender.Sender.run_forever") as mock_run:
-                        mock_run.side_effect = SystemExit
-                        from src.sender import main as sender_main
-                        try:
-                            sender_main()
-                        except SystemExit:
-                            pass
+        with (
+            patch.dict(os.environ, {"SPOOL_DIR": str(tmp_path / "spool"), "SPLUNK_HEC_URL": "https://splunk.test:8088", "SPLUNK_HEC_TOKEN": "test-token", "HEALTH_PORT": "9191"}),
+            patch("src.sender.uvicorn"),
+            patch("src.sender.SplunkHECClient") as mock_hec,
+            patch("src.sender.Sender.run_forever") as mock_run,
+        ):
+            mock_hec.return_value = MagicMock()
+            mock_run.side_effect = SystemExit
+            from src.sender import main as sender_main
+            with contextlib.suppress(SystemExit):
+                sender_main()
