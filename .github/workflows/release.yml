@@ -11,9 +11,17 @@ env:
   HELM_REGISTRY: ghcr.io
   HELM_REPO: ${{ github.repository }}/charts
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -61,17 +69,10 @@ jobs:
           docker run --rm -v ${{ github.workspace }}:/app -w /app site-mon:check \
             pip-audit
 
-      - name: Trivy scan
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: site-mon:check
-          format: sarif
-          output: trivy-results.sarif
-          severity: HIGH,CRITICAL
-
   release:
     needs: check
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write

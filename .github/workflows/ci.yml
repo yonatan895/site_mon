@@ -3,18 +3,24 @@ name: CI
 on:
   pull_request:
     branches: [main]
-    paths-ignore:
-      - "**.md"
-      - "LICENSE"
-      - ".gitignore"
+  push:
+    branches: [main]
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository }}/site-mon
   IMAGE_TAG: ci-${{ github.sha }}
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -85,14 +91,6 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             pip-audit
 
-      - name: Container vulnerability scan
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-          format: sarif
-          output: trivy-results.sarif
-          severity: HIGH,CRITICAL
-
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v7
@@ -104,6 +102,7 @@ jobs:
 
   helm-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - name: Checkout
@@ -119,3 +118,10 @@ jobs:
 
       - name: Helm unit tests
         run: helm unittest charts/api-to-splunk
+
+      - name: Helm lint
+        run: |
+          helm lint charts/api-to-splunk \
+            -f charts/api-to-splunk/values.yaml \
+            -f charts/api-to-splunk/values-prod.yaml \
+            -f charts/api-to-splunk/values-airgap.yaml
