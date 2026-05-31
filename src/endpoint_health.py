@@ -59,9 +59,7 @@ class EndpointHealthChecker:
             return
 
         self._stop_event.clear()
-        self._thread = threading.Thread(
-            target=self._run_loop, name="health-checker", daemon=True
-        )
+        self._thread = threading.Thread(target=self._run_loop, name="health-checker", daemon=True)
         self._thread.start()
         logger.info("health_checker_started")
 
@@ -89,9 +87,7 @@ class EndpointHealthChecker:
             try:
                 self._probe_endpoint(endpoint)
             except Exception:
-                logger.exception(
-                    "health_probe_unexpected_error", endpoint=endpoint.name
-                )
+                logger.exception("health_probe_unexpected_error", endpoint=endpoint.name)
 
     def _probe_endpoint(self, endpoint: SourceEndpoint) -> None:
         """Send a GET request to the endpoint's health path and update status.
@@ -151,9 +147,7 @@ class EndpointHealthChecker:
                 status.response_time_ms = None
                 self._record_failure(endpoint, status, f"error: {e}")
 
-    def _record_failure(
-        self, endpoint: SourceEndpoint, status: HealthStatus, reason: str
-    ) -> None:
+    def _record_failure(self, endpoint: SourceEndpoint, status: HealthStatus, reason: str) -> None:
         """Record a failed health check and transition state if needed.
 
         Args:

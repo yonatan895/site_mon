@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 class SpoolRecord(BaseModel):
     """A batch of events spooled for delivery to Splunk HEC."""
+
     batch_id: str
     events: list[dict[str, Any]]
     platform: str
@@ -20,6 +21,7 @@ class SpoolRecord(BaseModel):
 
 class SourceEndpoint(BaseModel):
     """Endpoint configuration for a data source."""
+
     name: str
     url: str
     platform: str
@@ -32,6 +34,7 @@ class SourceEndpoint(BaseModel):
 
 class HealthStatus(BaseModel):
     """Health status of a monitored endpoint."""
+
     endpoint_name: str
     is_healthy: bool = True
     last_check: datetime | None = None
@@ -43,6 +46,7 @@ class HealthStatus(BaseModel):
 
 class FieldExtraction(BaseModel):
     """Defines how to extract a field from raw response data."""
+
     field_name: str
     json_path: str  # jmespath expression
     default: Any | None = None
@@ -51,6 +55,7 @@ class FieldExtraction(BaseModel):
 
 class ThresholdRule(BaseModel):
     """Rule for evaluating a field value against a threshold."""
+
     field: str
     operator: str  # "eq" | "ne" | "gt" | "lt" | "gte" | "lte" | "contains" | "regex"
     value: Any
@@ -60,6 +65,7 @@ class ThresholdRule(BaseModel):
 
 class PlatformRule(BaseModel):
     """Complete rule configuration for a data type on a platform."""
+
     name: str
     data_type: str
     sourcetype: str
@@ -72,6 +78,7 @@ class PlatformRule(BaseModel):
 
 class SiteConfig(BaseModel):
     """Configuration for a site within a platform."""
+
     site_name: str
     platform: str
     endpoints: list[SourceEndpoint] = Field(default_factory=list)
@@ -81,6 +88,7 @@ class SiteConfig(BaseModel):
 
 class PollingEvent(BaseModel):
     """Result of a single polling cycle for a data type."""
+
     platform: str
     site: str
     data_type: str

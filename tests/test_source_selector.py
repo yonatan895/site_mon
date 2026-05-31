@@ -257,9 +257,7 @@ class TestValidateEndpoint:
             auth_type="basic",
             creds_vault_path="secret/test",
         )
-        site_config = SiteConfig(
-            site_name="main", platform="hmc", endpoints=[ep]
-        )
+        site_config = SiteConfig(site_name="main", platform="hmc", endpoints=[ep])
         selector = SourceSelector(
             platform="hmc",
             site_configs={"main": site_config},
@@ -270,9 +268,7 @@ class TestValidateEndpoint:
 
     def test_unhealthy_endpoint(self, mock_health_checker: MagicMock) -> None:
         mock_health_checker.is_healthy.return_value = False
-        mock_health_checker.get_status.return_value = MagicMock(
-            consecutive_failures=5
-        )
+        mock_health_checker.get_status.return_value = MagicMock(consecutive_failures=5)
         ep = SourceEndpoint(
             name="test-ep",
             url="https://example.com",
@@ -281,9 +277,7 @@ class TestValidateEndpoint:
             auth_type="basic",
             creds_vault_path="secret/test",
         )
-        site_config = SiteConfig(
-            site_name="main", platform="hmc", endpoints=[ep]
-        )
+        site_config = SiteConfig(site_name="main", platform="hmc", endpoints=[ep])
         selector = SourceSelector(
             platform="hmc",
             site_configs={"main": site_config},

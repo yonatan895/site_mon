@@ -67,9 +67,7 @@ class SpoolManager:
         self.spool_dir = Path(spool_dir)
         self.max_spool_size_bytes = max_spool_size_mb * 1024 * 1024
         self.dead_letter_dir = (
-            Path(dead_letter_dir)
-            if dead_letter_dir
-            else self.spool_dir / DEAD_LETTER_DIRNAME
+            Path(dead_letter_dir) if dead_letter_dir else self.spool_dir / DEAD_LETTER_DIRNAME
         )
         ensure_dir(str(self.spool_dir))
         ensure_dir(str(self.dead_letter_dir))
@@ -132,9 +130,7 @@ class SpoolManager:
         if not self.spool_dir.exists():
             return []
         return sorted(
-            e.name
-            for e in self.spool_dir.iterdir()
-            if e.is_file() and e.suffix == NDJSON_EXTENSION
+            e.name for e in self.spool_dir.iterdir() if e.is_file() and e.suffix == NDJSON_EXTENSION
         )
 
     def read_ndjson_batch(self, max_files: int = 50) -> list[SpoolEntry]:
@@ -169,9 +165,7 @@ class SpoolManager:
                 continue
 
             _, retry, _ = _parse_filename(filename)
-            entries.append(
-                SpoolEntry(filename=filename, content=content, retry_count=retry)
-            )
+            entries.append(SpoolEntry(filename=filename, content=content, retry_count=retry))
 
         if entries:
             total_lines = sum(e.content.count("\n") for e in entries)
@@ -263,9 +257,7 @@ class SpoolManager:
 
         dead_letter_count = 0
         if self.dead_letter_dir.exists():
-            dead_letter_count = sum(
-                1 for _ in self.dead_letter_dir.iterdir() if _.is_file()
-            )
+            dead_letter_count = sum(1 for _ in self.dead_letter_dir.iterdir() if _.is_file())
 
         processing_count = 0
         if self.spool_dir.exists():

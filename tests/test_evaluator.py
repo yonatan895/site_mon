@@ -33,9 +33,7 @@ class TestEvaluateSingleItem:
         evaluator: Evaluator,
         sample_raw_response_item: dict[str, Any],
     ) -> None:
-        result = evaluator.evaluate(
-            "cpc-stats", sample_raw_response_item, "test-endpoint"
-        )
+        result = evaluator.evaluate("cpc-stats", sample_raw_response_item, "test-endpoint")
         assert result.platform == "hmc"
         assert result.fields["cpc_name"] == "CPCA"
         assert result.fields["status"] == "operating"
@@ -47,9 +45,7 @@ class TestEvaluateSingleItem:
         evaluator: Evaluator,
         sample_raw_response_item: dict[str, Any],
     ) -> None:
-        result = evaluator.evaluate(
-            "cpc-stats", sample_raw_response_item, "test-endpoint"
-        )
+        result = evaluator.evaluate("cpc-stats", sample_raw_response_item, "test-endpoint")
         assert len(result.alerts) == 0
 
     def test_alerts_generated_for_breached_thresholds(
@@ -57,9 +53,7 @@ class TestEvaluateSingleItem:
         evaluator: Evaluator,
         sample_raw_response_alerting_item: dict[str, Any],
     ) -> None:
-        result = evaluator.evaluate(
-            "cpc-stats", sample_raw_response_alerting_item, "test-endpoint"
-        )
+        result = evaluator.evaluate("cpc-stats", sample_raw_response_alerting_item, "test-endpoint")
         assert len(result.alerts) == 3
         severities = [a["severity"] for a in result.alerts]
         assert "critical" in severities
@@ -91,12 +85,14 @@ class TestEvaluateBatch:
         base_site_config: SiteConfig,
     ) -> None:
         ev = Evaluator(
-            platform_rules={"cpc-stats": PlatformRule(
-                name="cpc-stats",
-                data_type="cpc-stats",
-                sourcetype="test",
-                index="test",
-            )},
+            platform_rules={
+                "cpc-stats": PlatformRule(
+                    name="cpc-stats",
+                    data_type="cpc-stats",
+                    sourcetype="test",
+                    index="test",
+                )
+            },
             site_config=base_site_config,
         )
         result = ev.evaluate("unknown-type", {"x": 1}, "test-ep")
@@ -127,9 +123,7 @@ class TestFieldExtraction:
         result = ev.evaluate("test", {"real": "data"}, "ep")
         assert result.fields["missing_field"] == "default_val"
 
-    def test_passthrough_when_no_extractions(
-        self, base_site_config: SiteConfig
-    ) -> None:
+    def test_passthrough_when_no_extractions(self, base_site_config: SiteConfig) -> None:
         rule = PlatformRule(
             name="test",
             data_type="test",
@@ -398,8 +392,6 @@ class TestTransforms:
 
 class TestMetadata:
     def test_raw_response_metadata(self, evaluator: Evaluator) -> None:
-        result = evaluator.evaluate(
-            "cpc-stats", {"cpc_name": "CPA", "status": "operating"}, "ep"
-        )
+        result = evaluator.evaluate("cpc-stats", {"cpc_name": "CPA", "status": "operating"}, "ep")
         assert result.raw_response_metadata["data_type"] == "cpc-stats"
         assert "rule_name" in result.raw_response_metadata

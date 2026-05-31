@@ -48,9 +48,7 @@ class Poller:
 
         # Load configuration
         loader = RulesLoader(rules_dir)
-        self.platform_rules, self.site_configs, self.policy = loader.load_full_config(
-            platform
-        )
+        self.platform_rules, self.site_configs, self.policy = loader.load_full_config(platform)
 
         # Initialize health checker with all endpoints
         all_endpoints: list[SourceEndpoint] = []
@@ -126,9 +124,7 @@ class Poller:
                 try:
                     result = future.result(timeout=endpoint.timeout + 30)
                     if result:
-                        lines = self._events_to_hec_lines(
-                            result, endpoint
-                        )
+                        lines = self._events_to_hec_lines(result, endpoint)
                         ndjson_lines.extend(lines)
                 except Exception:
                     logger.exception(
@@ -141,9 +137,7 @@ class Poller:
         if ndjson_lines:
             ndjson_content = "\n".join(ndjson_lines) + "\n"
             try:
-                self.spool_manager.write_ndjson(
-                    ndjson_content, batch_id=batch_id
-                )
+                self.spool_manager.write_ndjson(ndjson_content, batch_id=batch_id)
                 logger.info(
                     "cycle_complete",
                     batch_id=batch_id,
@@ -276,9 +270,7 @@ class Poller:
             "time": datetime.now(UTC).strftime("%s.%f"),
             "host": endpoint.name,
             "source": f"{endpoint.platform}:data",
-            "sourcetype": event_dict.get(
-                "sourcetype", f"{endpoint.platform}:data"
-            ),
+            "sourcetype": event_dict.get("sourcetype", f"{endpoint.platform}:data"),
             "index": event_dict.get("index", "mainframe_metrics"),
             "event": event_dict,
         }
@@ -591,13 +583,15 @@ class DS8000Client(BaseAPIClient):
         arrays = conn.get_systems()
         results = []
         for arr in arrays:
-            results.append({
-                "id": getattr(arr, "id", ""),
-                "name": getattr(arr, "name", ""),
-                "state": getattr(arr, "state", ""),
-                "capacity": getattr(arr, "capacity", ""),
-                "firmware_version": getattr(arr, "bundle_version", ""),
-            })
+            results.append(
+                {
+                    "id": getattr(arr, "id", ""),
+                    "name": getattr(arr, "name", ""),
+                    "state": getattr(arr, "state", ""),
+                    "capacity": getattr(arr, "capacity", ""),
+                    "firmware_version": getattr(arr, "bundle_version", ""),
+                }
+            )
         self.logger.info("ds8k_arrays_queried", count=len(results))
         return results
 
@@ -615,14 +609,16 @@ class DS8000Client(BaseAPIClient):
             try:
                 ports = conn.get_ioports(system.id)
                 for port in ports:
-                    results.append({
-                        "system_id": system.id,
-                        "port_id": getattr(port, "id", ""),
-                        "wwpn": getattr(port, "wwpn", ""),
-                        "state": getattr(port, "state", ""),
-                        "speed": getattr(port, "speed", ""),
-                        "type": getattr(port, "type", ""),
-                    })
+                    results.append(
+                        {
+                            "system_id": system.id,
+                            "port_id": getattr(port, "id", ""),
+                            "wwpn": getattr(port, "wwpn", ""),
+                            "state": getattr(port, "state", ""),
+                            "speed": getattr(port, "speed", ""),
+                            "type": getattr(port, "type", ""),
+                        }
+                    )
             except Exception as e:
                 self.logger.warning(
                     "ports_query_failed", system=getattr(system, "id", ""), error=str(e)
@@ -644,13 +640,15 @@ class DS8000Client(BaseAPIClient):
             try:
                 ranks = conn.get_ranks(system.id)
                 for rank in ranks:
-                    results.append({
-                        "system_id": system.id,
-                        "rank_id": getattr(rank, "id", ""),
-                        "state": getattr(rank, "state", ""),
-                        "capacity": getattr(rank, "capacity", ""),
-                        "raid_type": getattr(rank, "raid_type", ""),
-                    })
+                    results.append(
+                        {
+                            "system_id": system.id,
+                            "rank_id": getattr(rank, "id", ""),
+                            "state": getattr(rank, "state", ""),
+                            "capacity": getattr(rank, "capacity", ""),
+                            "raid_type": getattr(rank, "raid_type", ""),
+                        }
+                    )
             except Exception as e:
                 self.logger.warning(
                     "ranks_query_failed", system=getattr(system, "id", ""), error=str(e)
@@ -672,14 +670,16 @@ class DS8000Client(BaseAPIClient):
             try:
                 pairs = conn.get_copy_services(system.id)
                 for pair in pairs:
-                    results.append({
-                        "system_id": system.id,
-                        "pair_id": getattr(pair, "id", ""),
-                        "source_volume": getattr(pair, "source_volume", ""),
-                        "target_volume": getattr(pair, "target_volume", ""),
-                        "state": getattr(pair, "state", ""),
-                        "type": getattr(pair, "type", ""),
-                    })
+                    results.append(
+                        {
+                            "system_id": system.id,
+                            "pair_id": getattr(pair, "id", ""),
+                            "source_volume": getattr(pair, "source_volume", ""),
+                            "target_volume": getattr(pair, "target_volume", ""),
+                            "state": getattr(pair, "state", ""),
+                            "type": getattr(pair, "type", ""),
+                        }
+                    )
             except Exception as e:
                 self.logger.warning(
                     "replication_query_failed", system=getattr(system, "id", ""), error=str(e)
@@ -852,10 +852,12 @@ class TS7700Client(BaseAPIClient):
         creds = self._load_creds()
         session = requests.Session()
         session.auth = (creds["username"], creds["password"])
-        session.headers.update({
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-        })
+        session.headers.update(
+            {
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            }
+        )
         session.verify = False
         self._session = session
         self.logger.info("ts7700_session_created", url=self.endpoint.url)
@@ -894,14 +896,10 @@ class TS7700Client(BaseAPIClient):
             response = session.get(url, timeout=timeout)
             response.raise_for_status()
             data = response.json()
-            self.logger.info(
-                "ts7700_queried", data_type=data_type, url=url
-            )
+            self.logger.info("ts7700_queried", data_type=data_type, url=url)
             return data
         except requests.exceptions.RequestException as e:
-            self.logger.error(
-                "ts7700_query_failed", data_type=data_type, url=url, error=str(e)
-            )
+            self.logger.error("ts7700_query_failed", data_type=data_type, url=url, error=str(e))
             return []
 
     def _load_creds(self) -> dict[str, str]:
@@ -928,6 +926,7 @@ def main() -> None:
 
     from .health import app as health_app
     from .health import init_health
+
     init_health(
         health_checker_instance=poller.health_checker,
         spool_manager_instance=poller.spool_manager,

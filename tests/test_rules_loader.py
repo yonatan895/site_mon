@@ -18,44 +18,34 @@ def rules_dir_with_full_setup(tmp_rules_dir: str, fixtures_dir: Path) -> str:
 
 
 class TestLoadPlatformRules:
-    def test_loads_rules_for_hmc(
-        self, rules_dir_with_full_setup: str
-    ) -> None:
+    def test_loads_rules_for_hmc(self, rules_dir_with_full_setup: str) -> None:
         loader = RulesLoader(rules_dir=rules_dir_with_full_setup)
         rules = loader.load_platform_rules("hmc")
         assert "cpc-stats" in rules
         assert "lpars" in rules
         assert isinstance(rules["cpc-stats"], PlatformRule)
 
-    def test_common_fields_merged(
-        self, rules_dir_with_full_setup: str
-    ) -> None:
+    def test_common_fields_merged(self, rules_dir_with_full_setup: str) -> None:
         loader = RulesLoader(rules_dir=rules_dir_with_full_setup)
         rules = loader.load_platform_rules("hmc")
         rule = rules["cpc-stats"]
         assert rule.common_fields.get("platform") == "hmc"
 
-    def test_extractions_parsed(
-        self, rules_dir_with_full_setup: str
-    ) -> None:
+    def test_extractions_parsed(self, rules_dir_with_full_setup: str) -> None:
         loader = RulesLoader(rules_dir=rules_dir_with_full_setup)
         rules = loader.load_platform_rules("hmc")
         rule = rules["cpc-stats"]
         assert len(rule.extractions) == 3
         assert rule.extractions[0].field_name == "cpc_name"
 
-    def test_thresholds_parsed(
-        self, rules_dir_with_full_setup: str
-    ) -> None:
+    def test_thresholds_parsed(self, rules_dir_with_full_setup: str) -> None:
         loader = RulesLoader(rules_dir=rules_dir_with_full_setup)
         rules = loader.load_platform_rules("hmc")
         rule = rules["cpc-stats"]
         assert len(rule.thresholds) == 2
         assert rule.thresholds[0].field == "cpu_usage_pct"
 
-    def test_skips_source_policy(
-        self, rules_dir_with_full_setup: str
-    ) -> None:
+    def test_skips_source_policy(self, rules_dir_with_full_setup: str) -> None:
         loader = RulesLoader(rules_dir=rules_dir_with_full_setup)
         rules = loader.load_platform_rules("hmc")
         assert "source-policy" not in rules
@@ -72,34 +62,26 @@ class TestLoadPlatformRules:
 
 
 class TestLoadSiteConfigs:
-    def test_loads_sites_for_hmc(
-        self, rules_dir_with_full_setup: str
-    ) -> None:
+    def test_loads_sites_for_hmc(self, rules_dir_with_full_setup: str) -> None:
         loader = RulesLoader(rules_dir=rules_dir_with_full_setup)
         configs = loader.load_site_configs("hmc")
         assert "primary" in configs
         assert "backup" in configs
 
-    def test_endpoints_parsed(
-        self, rules_dir_with_full_setup: str
-    ) -> None:
+    def test_endpoints_parsed(self, rules_dir_with_full_setup: str) -> None:
         loader = RulesLoader(rules_dir=rules_dir_with_full_setup)
         configs = loader.load_site_configs("hmc")
         primary = configs["primary"]
         assert len(primary.endpoints) == 1
         assert primary.endpoints[0].name == "hmc-primary"
 
-    def test_is_primary_flag(
-        self, rules_dir_with_full_setup: str
-    ) -> None:
+    def test_is_primary_flag(self, rules_dir_with_full_setup: str) -> None:
         loader = RulesLoader(rules_dir=rules_dir_with_full_setup)
         configs = loader.load_site_configs("hmc")
         assert configs["primary"].is_primary is True
         assert configs["backup"].is_primary is False
 
-    def test_data_types(
-        self, rules_dir_with_full_setup: str
-    ) -> None:
+    def test_data_types(self, rules_dir_with_full_setup: str) -> None:
         loader = RulesLoader(rules_dir=rules_dir_with_full_setup)
         configs = loader.load_site_configs("hmc")
         primary = configs["primary"]
@@ -113,9 +95,7 @@ class TestLoadSiteConfigs:
 
 
 class TestLoadSourcePolicy:
-    def test_loads_policy(
-        self, rules_dir_with_full_setup: str
-    ) -> None:
+    def test_loads_policy(self, rules_dir_with_full_setup: str) -> None:
         loader = RulesLoader(rules_dir=rules_dir_with_full_setup)
         policy = loader.load_source_policy("hmc")
         assert policy["failover_mode"] == "primary_backup"
@@ -128,9 +108,7 @@ class TestLoadSourcePolicy:
 
 
 class TestLoadFullConfig:
-    def test_loads_all_three(
-        self, rules_dir_with_full_setup: str
-    ) -> None:
+    def test_loads_all_three(self, rules_dir_with_full_setup: str) -> None:
         loader = RulesLoader(rules_dir=rules_dir_with_full_setup)
         rules, sites, policy = loader.load_full_config("hmc")
         assert isinstance(rules, dict)
@@ -143,7 +121,5 @@ class TestLoadFullConfig:
 class TestMissingFile:
     def test_returns_empty_dict(self, tmp_rules_dir: str) -> None:
         loader = RulesLoader(rules_dir=tmp_rules_dir)
-        result = loader._load_yaml(
-            Path(tmp_rules_dir) / "nonexistent.yaml"
-        )
+        result = loader._load_yaml(Path(tmp_rules_dir) / "nonexistent.yaml")
         assert result == {}

@@ -16,31 +16,23 @@ from src.spool import (
 
 class TestParseFilename:
     def test_parses_retry_count(self) -> None:
-        batch_id, retry_count, ts = _parse_filename(
-            "batch123_3_1717171200000000.ndjson"
-        )
+        batch_id, retry_count, ts = _parse_filename("batch123_3_1717171200000000.ndjson")
         assert batch_id == "batch123"
         assert retry_count == 3
         assert ts == "1717171200000000"
 
     def test_parses_zero_retry(self) -> None:
-        batch_id, retry_count, ts = _parse_filename(
-            "batch123_0_1717171200000000.ndjson"
-        )
+        batch_id, retry_count, ts = _parse_filename("batch123_0_1717171200000000.ndjson")
         assert batch_id == "batch123"
         assert retry_count == 0
 
     def test_parses_processing_extension(self) -> None:
-        batch_id, retry_count, ts = _parse_filename(
-            "batch123_2_1717171200000000.processing"
-        )
+        batch_id, retry_count, ts = _parse_filename("batch123_2_1717171200000000.processing")
         assert batch_id == "batch123"
         assert retry_count == 2
 
     def test_parses_batch_id_with_underscores(self) -> None:
-        batch_id, retry_count, ts = _parse_filename(
-            "complex_batch_id_1_1717171200000000.ndjson"
-        )
+        batch_id, retry_count, ts = _parse_filename("complex_batch_id_1_1717171200000000.ndjson")
         assert batch_id == "complex_batch_id"
         assert retry_count == 1
 
@@ -77,9 +69,7 @@ class TestSpoolManagerWrite:
 
 
 class TestSpoolManagerRead:
-    def test_read_batch_renames_to_processing(
-        self, spool_manager: SpoolManager
-    ) -> None:
+    def test_read_batch_renames_to_processing(self, spool_manager: SpoolManager) -> None:
         spool_manager.write_ndjson('{"a": 1}\n', batch_id="b1")
         entries = spool_manager.read_ndjson_batch(max_files=10)
         assert len(entries) == 1
@@ -87,23 +77,17 @@ class TestSpoolManagerRead:
 
     def test_read_multiple_files(self, spool_manager: SpoolManager) -> None:
         for i in range(5):
-            spool_manager.write_ndjson(
-                '{"idx": ' + str(i) + "}\n", batch_id="b" + str(i)
-            )
+            spool_manager.write_ndjson('{"idx": ' + str(i) + "}\n", batch_id="b" + str(i))
         entries = spool_manager.read_ndjson_batch(max_files=10)
         assert len(entries) == 5
 
     def test_read_respects_max_files(self, spool_manager: SpoolManager) -> None:
         for i in range(10):
-            spool_manager.write_ndjson(
-                '{"idx": ' + str(i) + "}\n", batch_id="b" + str(i)
-            )
+            spool_manager.write_ndjson('{"idx": ' + str(i) + "}\n", batch_id="b" + str(i))
         entries = spool_manager.read_ndjson_batch(max_files=3)
         assert len(entries) == 3
 
-    def test_processing_files_not_re_listed(
-        self, spool_manager: SpoolManager
-    ) -> None:
+    def test_processing_files_not_re_listed(self, spool_manager: SpoolManager) -> None:
         spool_manager.write_ndjson('{"a": 1}\n', batch_id="b1")
         spool_manager.read_ndjson_batch(max_files=10)
         pending = spool_manager.list_pending()
@@ -127,9 +111,7 @@ class TestSpoolManagerAck:
 
 
 class TestSpoolManagerNack:
-    def test_nack_increments_retry_in_filename(
-        self, spool_manager: SpoolManager
-    ) -> None:
+    def test_nack_increments_retry_in_filename(self, spool_manager: SpoolManager) -> None:
         spool_manager.write_ndjson('{"a": 1}\n', batch_id="b1")
         entries = spool_manager.read_ndjson_batch(max_files=10)
         spool_manager.nack_file(entries[0].filename, error="test error")
@@ -137,9 +119,7 @@ class TestSpoolManagerNack:
         assert len(pending) == 1
         assert "_1_" in pending[0]
 
-    def test_nack_moves_to_dead_letter_after_max_retries(
-        self, spool_manager: SpoolManager
-    ) -> None:
+    def test_nack_moves_to_dead_letter_after_max_retries(self, spool_manager: SpoolManager) -> None:
         spool_manager.write_ndjson('{"a": 1}\n', batch_id="b1")
         for _ in range(MAX_RETRIES + 1):
             entries = spool_manager.read_ndjson_batch(max_files=10)
@@ -211,10 +191,7 @@ class TestMoveToDeadLetter:
     def test_moves_file(self, spool_manager: SpoolManager) -> None:
         spool_manager.write_ndjson('{"a": 1}\n', batch_id="b1")
         entries = spool_manager.read_ndjson_batch(max_files=10)
-        proc_path = str(
-            spool_manager.spool_dir
-            / (entries[0].filename.split("_0_")[0] + "_0_")
-        )
+        proc_path = str(spool_manager.spool_dir / (entries[0].filename.split("_0_")[0] + "_0_"))
         for path in spool_manager.spool_dir.iterdir():
             if path.suffix == PROCESSING_EXTENSION:
                 proc_path = str(path)

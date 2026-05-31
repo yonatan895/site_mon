@@ -82,16 +82,10 @@ class RulesLoader:
             merged_common = {**common_fields, **rule_data.get("common_fields", {})}
 
             # Parse extractions
-            extractions = [
-                FieldExtraction(**ex)
-                for ex in rule_data.get("extractions", [])
-            ]
+            extractions = [FieldExtraction(**ex) for ex in rule_data.get("extractions", [])]
 
             # Parse thresholds
-            thresholds = [
-                ThresholdRule(**th)
-                for th in rule_data.get("thresholds", [])
-            ]
+            thresholds = [ThresholdRule(**th) for th in rule_data.get("thresholds", [])]
 
             rule = PlatformRule(
                 name=rule_data.get("name", yaml_file.stem),
@@ -129,10 +123,7 @@ class RulesLoader:
             if not data:
                 continue
 
-            endpoints = [
-                SourceEndpoint(**ep)
-                for ep in data.get("endpoints", [])
-            ]
+            endpoints = [SourceEndpoint(**ep) for ep in data.get("endpoints", [])]
 
             config = SiteConfig(
                 site_name=data.get("site_name", yaml_file.stem),

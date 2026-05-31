@@ -33,19 +33,14 @@ class Sender:
 
         self.spool_manager = SpoolManager(spool_dir)
 
-        self.hec_url = hec_url or os.environ.get(
-            "SPLUNK_HEC_URL", "https://localhost:8088"
-        )
+        self.hec_url = hec_url or os.environ.get("SPLUNK_HEC_URL", "https://localhost:8088")
         self.hec_token = hec_token or os.environ.get("SPLUNK_HEC_TOKEN", "")
 
         self.hec_client = SplunkHECClient(
             hec_url=self.hec_url,
             hec_token=self.hec_token,
             batch_size=int(os.environ.get("SPLUNK_HEC_BATCH_SIZE", "500")),
-            ack_enabled=os.environ.get(
-                "SPLUNK_HEC_ACK_ENABLED", "true"
-            ).lower()
-            == "true",
+            ack_enabled=os.environ.get("SPLUNK_HEC_ACK_ENABLED", "true").lower() == "true",
             max_connections=int(os.environ.get("SPLUNK_HEC_MAX_CONNECTIONS", "10")),
             timeout=int(os.environ.get("SPLUNK_HEC_TIMEOUT", "30")),
         )
@@ -65,9 +60,7 @@ class Sender:
         Returns:
             Number of files successfully sent.
         """
-        entries = self.spool_manager.read_ndjson_batch(
-            max_files=DEFAULT_BATCH_FILES
-        )
+        entries = self.spool_manager.read_ndjson_batch(max_files=DEFAULT_BATCH_FILES)
         if not entries:
             return 0
 
@@ -81,16 +74,10 @@ class Sender:
                     self.spool_manager.ack_file(entry.filename)
                     success_count += 1
                 else:
-                    self.spool_manager.nack_file(
-                        entry.filename, error="hec_send_returned_false"
-                    )
+                    self.spool_manager.nack_file(entry.filename, error="hec_send_returned_false")
             except Exception:
-                logger.exception(
-                    "send_failed", filename=entry.filename
-                )
-                self.spool_manager.nack_file(
-                    entry.filename, error="hec_send_exception"
-                )
+                logger.exception("send_failed", filename=entry.filename)
+                self.spool_manager.nack_file(entry.filename, error="hec_send_exception")
 
         failure_count = len(entries) - success_count
         logger.info(
@@ -105,9 +92,7 @@ class Sender:
 
     def run_forever(self) -> None:
         """Run the sender continuously, watching for new spool files."""
-        logger.info(
-            "sender_loop_started", watch_interval=DEFAULT_WATCH_INTERVAL
-        )
+        logger.info("sender_loop_started", watch_interval=DEFAULT_WATCH_INTERVAL)
         last_cleanup = time.monotonic()
 
         try:
@@ -138,9 +123,7 @@ def main() -> None:
     hec_url = os.environ.get("SPLUNK_HEC_URL", "")
     hec_token = os.environ.get("SPLUNK_HEC_TOKEN", "")
 
-    sender = Sender(
-        spool_dir=spool_dir, hec_url=hec_url, hec_token=hec_token
-    )
+    sender = Sender(spool_dir=spool_dir, hec_url=hec_url, hec_token=hec_token)
 
     from .health import app as health_app
     from .health import init_health

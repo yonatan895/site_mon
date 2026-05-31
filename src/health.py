@@ -91,10 +91,12 @@ def _build_app() -> Any:
         Returns:
             JSON with status 'ok' if the process is alive.
         """
-        return JSONResponse({
-            "status": "ok",
-            "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
-        })
+        return JSONResponse(
+            {
+                "status": "ok",
+                "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            }
+        )
 
     async def readyz(request: Any) -> JSONResponse:
         """Kubernetes readiness probe endpoint.
@@ -110,29 +112,33 @@ def _build_app() -> Any:
         if spool_manager is not None:
             stats = spool_manager.get_spool_stats()
             if stats["total_size_mb"] > 1000:
-                return JSONResponse({
-                    "status": "not_ready",
-                    "reason": "spool_full",
-                    "spool_size_mb": stats["total_size_mb"],
-                })
+                return JSONResponse(
+                    {
+                        "status": "not_ready",
+                        "reason": "spool_full",
+                        "spool_size_mb": stats["total_size_mb"],
+                    }
+                )
             checks.append({"spool": "ok", "spool_size_mb": stats["total_size_mb"]})
 
         if health_checker is not None:
             all_statuses = health_checker.get_all_statuses()
-            healthy_count = sum(
-                1 for s in all_statuses.values() if s.is_healthy
-            )
+            healthy_count = sum(1 for s in all_statuses.values() if s.is_healthy)
             if healthy_count == 0:
-                return JSONResponse({
-                    "status": "not_ready",
-                    "reason": "no_healthy_endpoints",
-                })
+                return JSONResponse(
+                    {
+                        "status": "not_ready",
+                        "reason": "no_healthy_endpoints",
+                    }
+                )
             checks.append({"healthy_endpoints": healthy_count})
 
-        return JSONResponse({
-            "status": "ready",
-            "checks": checks,
-        })
+        return JSONResponse(
+            {
+                "status": "ready",
+                "checks": checks,
+            }
+        )
 
     async def metrics(request: Any) -> PlainTextResponse:
         """Prometheus metrics endpoint.
@@ -161,12 +167,14 @@ def _build_app() -> Any:
 
         if health_checker is not None:
             all_statuses = health_checker.get_all_statuses()
-            lines.append("# HELP site_mon_endpoint_health_status Endpoint health (1=healthy, 0=unhealthy)")
+            lines.append(
+                "# HELP site_mon_endpoint_health_status Endpoint health (1=healthy, 0=unhealthy)"
+            )
             lines.append("# TYPE site_mon_endpoint_health_status gauge")
             for name, status in all_statuses.items():
                 lines.append(
                     f'site_mon_endpoint_health_status{{endpoint="{name}"}} '
-                    f'{1 if status.is_healthy else 0}'
+                    f"{1 if status.is_healthy else 0}"
                 )
 
         lines.append("")
@@ -197,9 +205,7 @@ def _update_prometheus_metrics() -> None:
     if health_checker is not None:
         all_statuses = health_checker.get_all_statuses()
         for name, status in all_statuses.items():
-            endpoint_health.labels(endpoint=name).set(
-                1 if status.is_healthy else 0
-            )
+            endpoint_health.labels(endpoint=name).set(1 if status.is_healthy else 0)
 
 
 # Build the application at import time

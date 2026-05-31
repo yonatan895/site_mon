@@ -58,9 +58,7 @@ class TestReadyz:
         data = response.json()
         assert data["status"] == "ready"
 
-    def test_returns_not_ready_when_spool_full(
-        self, client: TestClient
-    ) -> None:
+    def test_returns_not_ready_when_spool_full(self, client: TestClient) -> None:
         import src.health as health_mod
 
         mock = MagicMock()
@@ -79,9 +77,7 @@ class TestReadyz:
         assert data["status"] == "not_ready"
         assert "spool_full" in data.get("reason", "")
 
-    def test_returns_not_ready_when_no_healthy_endpoints(
-        self, client: TestClient
-    ) -> None:
+    def test_returns_not_ready_when_no_healthy_endpoints(self, client: TestClient) -> None:
         import src.health as health_mod
 
         mock_checker = MagicMock()

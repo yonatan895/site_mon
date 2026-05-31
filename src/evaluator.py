@@ -77,9 +77,7 @@ class Evaluator:
         if isinstance(raw_data, list):
             events: list[PollingEvent] = []
             for item in raw_data:
-                event = self._evaluate_item(
-                    data_type, item, rule, endpoint_name
-                )
+                event = self._evaluate_item(data_type, item, rule, endpoint_name)
                 if event is not None:
                     events.append(event)
             logger.debug(
@@ -221,14 +219,16 @@ class Evaluator:
                         threshold=rule.value,
                         **fields,
                     )
-                    alerts.append({
-                        "field": rule.field,
-                        "severity": rule.severity,
-                        "message": message,
-                        "threshold": str(rule.value),
-                        "actual": str(field_value),
-                        "operator": rule.operator,
-                    })
+                    alerts.append(
+                        {
+                            "field": rule.field,
+                            "severity": rule.severity,
+                            "message": message,
+                            "threshold": str(rule.value),
+                            "actual": str(field_value),
+                            "operator": rule.operator,
+                        }
+                    )
             except Exception as e:
                 logger.warning(
                     "threshold_evaluation_failed",
@@ -255,9 +255,7 @@ class Evaluator:
             try:
                 return bool(OPERATOR_FUNCTIONS[operator_name](field_value, rule.value))
             except TypeError:
-                return bool(
-                    OPERATOR_FUNCTIONS[operator_name](str(field_value), rule.value)
-                )
+                return bool(OPERATOR_FUNCTIONS[operator_name](str(field_value), rule.value))
 
         if operator_name == "contains":
             return str(rule.value).lower() in str(field_value).lower()

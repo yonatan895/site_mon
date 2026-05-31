@@ -167,8 +167,7 @@ class SplunkHECClient:
             )
             time.sleep(wait_seconds)
             raise urllib3.exceptions.HTTPError(
-                f"HEC returned {response.status}: "
-                f"{response.data[:500]!r}"
+                f"HEC returned {response.status}: {response.data[:500]!r}"
             )
 
         error_msg = (

@@ -158,9 +158,7 @@ def retry_with_backoff(
         @wraps(func)
         @retry(
             stop=stop_after_attempt(max_attempts),
-            wait=wait_exponential_jitter(
-                initial=base_delay, max=max_delay, jitter=base_delay
-            ),
+            wait=wait_exponential_jitter(initial=base_delay, max=max_delay, jitter=base_delay),
             before_sleep=before_sleep_log(_get_utils_logger(), logging.WARNING),
             reraise=True,
         )
