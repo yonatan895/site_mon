@@ -65,6 +65,7 @@ class Poller:
         )
         self.spool_manager = SpoolManager(spool_dir)
         self.evaluator = Evaluator(platform_rules=self.platform_rules)
+        self._clients: dict[str, Any] = {}
 
         logger.info(
             "poller_initialized",
@@ -135,6 +136,12 @@ class Poller:
                         endpoint=endpoint.name,
                         data_type=data_type,
                     )
+                    try:
+                        from .health import api_query_errors
+
+                        api_query_errors.inc()
+                    except ImportError:
+                        pass
 
         event_count = len(ndjson_lines)
         if ndjson_lines:
@@ -151,6 +158,12 @@ class Poller:
                 logger.exception("spool_write_failed", batch_id=batch_id)
 
         elapsed_ms = (time.monotonic() - cycle_start) * 1000
+        try:
+            from .health import polling_cycle_duration
+
+            polling_cycle_duration.observe(elapsed_ms / 1000)
+        except ImportError:
+            pass
         logger.info(
             "polling_cycle_finished",
             platform=self.platform,
@@ -290,8 +303,9 @@ class Poller:
         Returns:
             Raw response data as dict or list of dicts.
         """
-        client = self._create_client(endpoint)
-        return client.query(data_type, platform_rule)
+        if endpoint.name not in self._clients:
+            self._clients[endpoint.name] = self._create_client(endpoint)
+        return self._clients[endpoint.name].query(data_type, platform_rule)
 
     def _create_client(self, endpoint: SourceEndpoint) -> Any:
         """Factory method to create the appropriate API client for the platform.
@@ -433,7 +447,7 @@ class HMCClient(BaseAPIClient):
             creds["username"],
             creds["password"],
             verify_cert=verify_ssl,
-            session_id="site_mon_hmc",
+            session_id=f"site_mon_hmc_{uuid.uuid4().hex[:8]}",
         )
         self._client = session
         self.logger.info("hmc_connected", url=self.endpoint.url)
