@@ -1,7 +1,9 @@
-.PHONY: lint lint-fix typecheck test test-cov build clean
+.PHONY: lint lint-fix typecheck test test-cov helm-lint helm-test build build-dev clean
 
 VENV ?= .venv
 PYTHON ?= python3
+HELM ?= helm
+CHART_DIR = charts/api-to-splunk
 
 lint:
 	$(PYTHON) -m ruff check src/ tests/
@@ -23,6 +25,14 @@ test-cov:
 		--cov-report=term-missing \
 		--cov-fail-under=85
 
+helm-lint:
+	$(HELM) lint $(CHART_DIR)
+	$(HELM) lint $(CHART_DIR) -f $(CHART_DIR)/values-prod.yaml
+	$(HELM) lint $(CHART_DIR) -f $(CHART_DIR)/values-airgap.yaml
+
+helm-test:
+	$(HELM) unittest $(CHART_DIR)
+
 build:
 	docker build -t site-mon:latest .
 
@@ -33,4 +43,4 @@ clean:
 	rm -rf .pytest_cache/ .mypy_cache/ .ruff_cache/
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
-all: lint typecheck test-cov
+all: lint typecheck test-cov helm-lint helm-test
