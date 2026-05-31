@@ -120,6 +120,12 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Smoke test prod image
+        run: |
+          docker run --rm \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }} \
+            python -c "import src.poller, src.sender; print('OK')"
+
       - name: Package Helm chart
         run: |
           helm package charts/api-to-splunk \

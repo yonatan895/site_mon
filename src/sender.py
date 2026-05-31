@@ -64,6 +64,7 @@ class Sender:
         Returns:
             Number of files successfully sent.
         """
+        cycle_start = time.monotonic()
         entries = self.spool_manager.read_ndjson_batch(max_files=DEFAULT_BATCH_FILES)
         if not entries:
             return 0
@@ -90,6 +91,14 @@ class Sender:
                     self.spool_manager.nack_file(entry.filename, error="send_exception")
 
         failure_count = len(entries) - success_count
+        try:
+            from .health import batch_send_duration, batch_send_errors
+
+            batch_send_duration.observe(time.monotonic() - cycle_start)
+            if failure_count > 0:
+                batch_send_errors.inc(failure_count)
+        except ImportError:
+            pass
         logger.info(
             "sender_cycle_complete",
             success=success_count,
