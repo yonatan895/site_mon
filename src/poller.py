@@ -388,6 +388,28 @@ class BaseAPIClient:
         """
         raise NotImplementedError
 
+    def _load_creds(self) -> dict[str, str]:
+        """Load credentials from vault or config.
+
+        Returns:
+            Dictionary with username and password.
+
+        Raises:
+            RuntimeError: If password environment variable is empty.
+        """
+        platform = self.endpoint.platform.upper()
+        site = self.endpoint.site.upper()
+        username_key = f"{platform}_{site}_USERNAME"
+        password_key = f"{platform}_{site}_PASSWORD"
+
+        username = os.environ.get(username_key, "admin")
+        password = os.environ.get(password_key, "")
+        if not password:
+            raise RuntimeError(
+                f"Missing required credential: {password_key} for endpoint {self.endpoint.name}"
+            )
+        return {"username": username, "password": password}
+
 
 class HMCClient(BaseAPIClient):
     """Client for IBM Z HMC (Hardware Management Console) via zhmcclient."""
@@ -512,28 +534,6 @@ class HMCClient(BaseAPIClient):
                 )
         self.logger.info("hmc_chpids_queried", count=len(results))
         return results
-
-    def _load_creds(self) -> dict[str, str]:
-        """Load credentials from vault or config.
-
-        Returns:
-            Dictionary with username and password.
-
-        Raises:
-            RuntimeError: If password environment variable is empty.
-        """
-        platform = self.endpoint.platform.upper()
-        site = self.endpoint.site.upper()
-        username_key = f"{platform}_{site}_USERNAME"
-        password_key = f"{platform}_{site}_PASSWORD"
-
-        username = os.environ.get(username_key, "admin")
-        password = os.environ.get(password_key, "")
-        if not password:
-            raise RuntimeError(
-                f"Missing required credential: {password_key} for endpoint {self.endpoint.name}"
-            )
-        return {"username": username, "password": password}
 
 
 class DS8000Client(BaseAPIClient):
@@ -704,17 +704,6 @@ class DS8000Client(BaseAPIClient):
         self.logger.info("ds8k_replication_queried", count=len(results))
         return results
 
-    def _load_creds(self) -> dict[str, str]:
-        """Load credentials from vault or config."""
-        platform = self.endpoint.platform.upper()
-        site = self.endpoint.site.upper()
-        username_key = f"{platform}_{site}_USERNAME"
-        password_key = f"{platform}_{site}_PASSWORD"
-        return {
-            "username": os.environ.get(username_key, "admin"),
-            "password": os.environ.get(password_key, ""),
-        }
-
 
 class CSMClient(BaseAPIClient):
     """Client for IBM Copy Services Manager via pycsm."""
@@ -836,17 +825,6 @@ class CSMClient(BaseAPIClient):
             self.logger.error("csm_replication_query_failed", error=str(e))
             return []
 
-    def _load_creds(self) -> dict[str, str]:
-        """Load credentials from vault or config."""
-        platform = self.endpoint.platform.upper()
-        site = self.endpoint.site.upper()
-        username_key = f"{platform}_{site}_USERNAME"
-        password_key = f"{platform}_{site}_PASSWORD"
-        return {
-            "username": os.environ.get(username_key, "admin"),
-            "password": os.environ.get(password_key, ""),
-        }
-
 
 class TS7700Client(BaseAPIClient):
     """Client for IBM TS7700 tape virtualization via REST API."""
@@ -918,17 +896,6 @@ class TS7700Client(BaseAPIClient):
         except requests.exceptions.RequestException as e:
             self.logger.error("ts7700_query_failed", data_type=data_type, url=url, error=str(e))
             return []
-
-    def _load_creds(self) -> dict[str, str]:
-        """Load credentials from vault or config."""
-        platform = self.endpoint.platform.upper()
-        site = self.endpoint.site.upper()
-        username_key = f"{platform}_{site}_USERNAME"
-        password_key = f"{platform}_{site}_PASSWORD"
-        return {
-            "username": os.environ.get(username_key, "admin"),
-            "password": os.environ.get(password_key, ""),
-        }
 
 
 def main() -> None:
