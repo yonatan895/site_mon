@@ -6,6 +6,7 @@ ARG INSTALL_DEV=false
 
 COPY requirements.txt requirements-dev.txt* ./
 RUN pip install --no-cache-dir -r requirements.txt
+ARG INSTALL_DEV
 RUN if [ "$INSTALL_DEV" = "true" ]; then \
       pip install --no-cache-dir -r requirements-dev.txt; \
     fi
