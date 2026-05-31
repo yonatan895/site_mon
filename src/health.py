@@ -12,18 +12,6 @@ logger = setup_logging(__name__)
 health_checker: Any | None = None
 spool_manager: Any | None = None
 
-# Metrics storage
-_metrics_store: dict[str, Any] = {
-    "spool_pending_count": 0,
-    "spool_size_mb": 0.0,
-    "spool_dead_letter_count": 0,
-    "batch_send_duration_seconds": [],
-    "batch_send_errors_total": 0,
-    "endpoint_health_status": {},
-    "polling_cycle_duration_seconds": [],
-    "api_query_errors_total": 0,
-}
-
 # Try to use prometheus_client if available, otherwise use simple counters
 try:
     from prometheus_client import REGISTRY, Counter, Gauge, Histogram, generate_latest
