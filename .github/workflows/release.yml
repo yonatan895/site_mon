@@ -72,6 +72,9 @@ jobs:
   release:
     needs: check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout
@@ -79,7 +82,11 @@ jobs:
 
       - name: Extract version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          VERSION_NUM="${VERSION#v}"
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "VERSION_NUM=${VERSION_NUM}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -115,27 +122,13 @@ jobs:
       - name: Package Helm chart
         run: |
           helm package charts/api-to-splunk \
-            --version ${{ steps.version.outputs.VERSION }} \
-            --app-version ${{ steps.version.outputs.VERSION }}
+            --version ${{ steps.version.outputs.VERSION_NUM }} \
+            --app-version ${{ steps.version.outputs.VERSION_NUM }}
 
       - name: Login to GHCR for Helm
         run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username ${{ github.actor }} --password-stdin
 
       - name: Push Helm chart to GHCR
         run: |
-          helm push api-to-splunk-${{ steps.version.outputs.VERSION }}.tgz \
+          helm push api-to-splunk-${{ steps.version.outputs.VERSION_NUM }}.tgz \
             oci://${{ env.HELM_REGISTRY }}/${{ env.HELM_REPO }}
-
-      - name: Update Helm values with release image tag
-        run: |
-          sed -i "s|^  tag: .*|  tag: ${{ steps.version.outputs.VERSION }}|" charts/api-to-splunk/values-prod.yaml
-
-      - name: Commit and push values update
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add charts/api-to-splunk/values-prod.yaml
-          git diff --staged --quiet || (
-            git commit -m "chore: bump image tag to ${{ steps.version.outputs.VERSION }}"
-            git push
-          )
