@@ -24,8 +24,8 @@ tests:
         minAvailable: 2
     asserts:
       - equal:
-        path: kind
-        value: PodDisruptionBudget
+          path: kind
+          value: PodDisruptionBudget
 
   - it: should have selector labels
     set:

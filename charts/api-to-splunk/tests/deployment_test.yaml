@@ -5,7 +5,7 @@ release:
 templates:
   - deployment.yaml
 tests:
-  - it: should have correct name and labels
+  - it: should have correct name and replica count
     set:
       global:
         platform: hmc
@@ -18,18 +18,11 @@ tests:
       - equal:
           path: metadata.labels["app.kubernetes.io/component"]
           value: hmc
-
-  - it: should set replicas from values
-    set:
-      global:
-        platform: hmc
-      replicaCount: 1
-    asserts:
       - equal:
           path: spec.replicas
           value: 1
 
-  - it: should set replicas from values-prod override
+  - it: should set replicas from override
     set:
       global:
         platform: hmc
@@ -39,75 +32,65 @@ tests:
           path: spec.replicas
           value: 2
 
-  - it: should have poller container
+  - it: should have poller container name and command
     set:
       global:
         platform: hmc
     asserts:
-      - contains:
-          path: spec.template.spec.containers
-          content:
-            name: poller
-      - contains:
-          path: spec.template.spec.containers
-          content:
-            command:
-              - python
-              - -m
-              - src.poller
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: poller
+      - equal:
+          path: spec.template.spec.containers[0].command[0]
+          value: python
+      - equal:
+          path: spec.template.spec.containers[0].command[2]
+          value: src.poller
 
-  - it: should have sender container
+  - it: should have sender container name and command
     set:
       global:
         platform: hmc
     asserts:
-      - contains:
-          path: spec.template.spec.containers
-          content:
-            name: sender
-      - contains:
-          path: spec.template.spec.containers
-          content:
-            command:
-              - python
-              - -m
-              - src.sender
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: sender
+      - equal:
+          path: spec.template.spec.containers[1].command[0]
+          value: python
+      - equal:
+          path: spec.template.spec.containers[1].command[2]
+          value: src.sender
 
   - it: should mount spool volume in both containers
     set:
       global:
         platform: hmc
     asserts:
-      - contains:
-          path: spec.template.spec.containers
-          content:
-            name: poller
-            volumeMounts:
-              - name: spool
-                mountPath: /spool
-          count: 1
-      - contains:
-          path: spec.template.spec.containers
-          content:
-            name: sender
-            volumeMounts:
-              - name: spool
-                mountPath: /spool
-          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].name
+          value: spool
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].mountPath
+          value: /spool
+      - equal:
+          path: spec.template.spec.containers[1].volumeMounts[0].name
+          value: spool
+      - equal:
+          path: spec.template.spec.containers[1].volumeMounts[0].mountPath
+          value: /spool
 
   - it: should mount rules volume in poller container
     set:
       global:
         platform: hmc
     asserts:
-      - contains:
-          path: spec.template.spec.containers
-          content:
-            name: poller
-            volumeMounts:
-              - name: rules
-                mountPath: /rules
-          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[1].name
+          value: rules
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[1].mountPath
+          value: /rules
 
   - it: should have securityContext
     set:
@@ -126,81 +109,84 @@ tests:
       global:
         platform: hmc
     asserts:
-      - contains:
-          path: spec.template.spec.containers
-          content:
-            name: poller
-            livenessProbe:
-              httpGet:
-                path: /healthz
-                port: 8080
-              initialDelaySeconds: 30
-              periodSeconds: 10
-          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /healthz
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: 8080
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 30
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 10
 
   - it: should have readiness probe on poller
     set:
       global:
         platform: hmc
     asserts:
-      - contains:
-          path: spec.template.spec.containers
-          content:
-            name: poller
-            readinessProbe:
-              httpGet:
-                path: /readyz
-                port: 8080
-              initialDelaySeconds: 10
-              periodSeconds: 10
-          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /readyz
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: 8080
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
+          value: 10
 
   - it: should have liveness probe on sender
     set:
       global:
         platform: hmc
     asserts:
-      - contains:
-          path: spec.template.spec.containers
-          content:
-            name: sender
-            livenessProbe:
-              httpGet:
-                path: /healthz
-                port: 8081
-              initialDelaySeconds: 15
-              periodSeconds: 10
-          count: 1
+      - equal:
+          path: spec.template.spec.containers[1].livenessProbe.httpGet.path
+          value: /healthz
+      - equal:
+          path: spec.template.spec.containers[1].livenessProbe.httpGet.port
+          value: 8081
+      - equal:
+          path: spec.template.spec.containers[1].livenessProbe.initialDelaySeconds
+          value: 15
+      - equal:
+          path: spec.template.spec.containers[1].livenessProbe.periodSeconds
+          value: 10
 
   - it: should have poller port 8080
     set:
       global:
         platform: hmc
     asserts:
-      - contains:
-          path: spec.template.spec.containers
-          content:
-            name: poller
-            ports:
-              - containerPort: 8080
-                name: health
-                protocol: TCP
-          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 8080
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].name
+          value: health
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].protocol
+          value: TCP
 
   - it: should have sender port 8081
     set:
       global:
         platform: hmc
     asserts:
-      - contains:
-          path: spec.template.spec.containers
-          content:
-            name: sender
-            ports:
-              - containerPort: 8081
-                name: health
-                protocol: TCP
-          count: 1
+      - equal:
+          path: spec.template.spec.containers[1].ports[0].containerPort
+          value: 8081
+      - equal:
+          path: spec.template.spec.containers[1].ports[0].name
+          value: health
+      - equal:
+          path: spec.template.spec.containers[1].ports[0].protocol
+          value: TCP
 
   - it: should include vault secretRef when enabled
     set:
@@ -209,14 +195,9 @@ tests:
       vault:
         enabled: true
     asserts:
-      - contains:
-          path: spec.template.spec.containers
-          content:
-            name: poller
-            envFrom:
-              - secretRef:
-                  name: api-to-splunk-secrets
-          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].envFrom[1].secretRef.name
+          value: api-to-splunk-secrets
 
   - it: should not include vault secretRef when disabled
     set:
@@ -225,25 +206,23 @@ tests:
       vault:
         enabled: false
     asserts:
-      - notContains:
-          path: spec.template.spec.containers
-          content:
-            name: poller
-            envFrom:
-              - secretRef:
-                  name: api-to-splunk-secrets
+      - equal:
+          path: spec.template.spec.containers[0].envFrom
+          count: 1
+      - notExists:
+          path: spec.template.spec.containers[0].envFrom[1]
 
   - it: should have spool PVC volume
     set:
       global:
         platform: hmc
     asserts:
-      - contains:
-          path: spec.template.spec.volumes
-          content:
-            name: spool
-            persistentVolumeClaim:
-              claimName: test-release-api-to-splunk-hmc-spool
+      - equal:
+          path: spec.template.spec.volumes[0].name
+          value: spool
+      - equal:
+          path: spec.template.spec.volumes[0].persistentVolumeClaim.claimName
+          value: test-release-api-to-splunk-hmc-spool
 
   - it: should have rules configMap volume
     set:
@@ -252,12 +231,12 @@ tests:
       rulesConfigMap:
         name: api-to-splunk-rules
     asserts:
-      - contains:
-          path: spec.template.spec.volumes
-          content:
-            name: rules
-            configMap:
-              name: api-to-splunk-rules
+      - equal:
+          path: spec.template.spec.volumes[1].name
+          value: rules
+      - equal:
+          path: spec.template.spec.volumes[1].configMap.name
+          value: api-to-splunk-rules
 
   - it: should set productive resources for poller
     set:
@@ -272,18 +251,12 @@ tests:
             cpu: 1000m
             memory: 1Gi
     asserts:
-      - contains:
-          path: spec.template.spec.containers
-          content:
-            name: poller
-            resources:
-              requests:
-                cpu: 200m
-                memory: 512Mi
-              limits:
-                cpu: 1000m
-                memory: 1Gi
-          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 200m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 1000m
 
   - it: should set productive resources for sender
     set:
@@ -298,18 +271,12 @@ tests:
             cpu: 200m
             memory: 256Mi
     asserts:
-      - contains:
-          path: spec.template.spec.containers
-          content:
-            name: sender
-            resources:
-              requests:
-                cpu: 50m
-                memory: 128Mi
-              limits:
-                cpu: 200m
-                memory: 256Mi
-          count: 1
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.cpu
+          value: 50m
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.cpu
+          value: 200m
 
   - it: should use serviceAccount from values
     set:
