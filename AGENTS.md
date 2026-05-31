@@ -7,24 +7,28 @@ Every change goes through a PR. Never push directly to `main`.
 1. `git fetch origin && git checkout main && git pull origin main`
 2. `git checkout -b <prefix>/<description>` — use `feat/`, `fix/`, `audit/`, or `refactor/`
 3. Implement the change with comprehensive tests
-4. `make all` — must pass (lint → typecheck → test-cov)
+4. `make all` — must pass (lint → typecheck → test-cov → helm-lint → helm-test)
 5. `git add` relevant files, commit, `git push -u origin <branch>`
 6. `gh pr create --base main` — open PR for review
 
 ## Dev commands
 
 ```
-make all              # lint → typecheck → test-cov (order matters)
+make all              # lint → typecheck → test-cov → helm-lint → helm-test
 make lint             # ruff check + ruff format --check
 make lint-fix         # auto-fix lint + format
 make typecheck        # mypy src/
 make test             # pytest -v
 make test-cov         # pytest --cov-fail-under=85
+make helm-lint        # helm lint (default, prod, airgap values)
+make helm-test        # helm unittest (requires helm-unittest plugin)
 make build            # Docker build (production)
 make build-dev        # Docker build with INSTALL_DEV=true
 ```
 
 Run `make all` before committing. CI runs the same checks inside the container.
+
+`helm-test` requires the helm-unittest plugin: `helm plugin install https://github.com/helm-unittest/helm-unittest`
 
 ## Architecture
 
