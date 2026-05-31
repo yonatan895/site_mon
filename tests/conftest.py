@@ -40,6 +40,7 @@ def sample_source_endpoint() -> SourceEndpoint:
         creds_vault_path="secret/mainframe/hmc/primary",
         rate_limit_rps=5.0,
         timeout=30,
+        role="primary",
     )
 
 
@@ -54,6 +55,7 @@ def sample_backup_endpoint() -> SourceEndpoint:
         creds_vault_path="secret/mainframe/hmc/backup",
         rate_limit_rps=5.0,
         timeout=30,
+        role="backup",
     )
 
 

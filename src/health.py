@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
+from . import __version__
 from .utils import setup_logging
 
 logger = setup_logging(__name__)
@@ -94,6 +95,7 @@ def _build_app() -> Any:
         return JSONResponse(
             {
                 "status": "ok",
+                "version": __version__,
                 "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
             }
         )

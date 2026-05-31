@@ -162,8 +162,8 @@ class SourceSelector:
 def _endpoint_is_primary(endpoint: SourceEndpoint, site_name: str) -> bool:
     """Determine if an endpoint is the primary for its site.
 
-    Heuristic: primary endpoints have 'primary' or 'main' in their name,
-    or are the first endpoint without 'backup' or 'dr' or 'secondary' in name.
+    Uses the endpoint's role field if set, otherwise falls back
+    to name-based heuristics.
 
     Args:
         endpoint: The endpoint to check.
@@ -172,6 +172,8 @@ def _endpoint_is_primary(endpoint: SourceEndpoint, site_name: str) -> bool:
     Returns:
         True if the endpoint is considered primary.
     """
+    if endpoint.role is not None:
+        return endpoint.role == "primary"
     name_lower = endpoint.name.lower()
     if "primary" in name_lower or "_pri" in name_lower:
         return True

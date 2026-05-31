@@ -6,19 +6,6 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-class SpoolRecord(BaseModel):
-    """A batch of events spooled for delivery to Splunk HEC."""
-
-    batch_id: str
-    events: list[dict[str, Any]]
-    platform: str
-    site: str
-    endpoint: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    retry_count: int = 0
-    max_retries: int = 5
-
-
 class SourceEndpoint(BaseModel):
     """Endpoint configuration for a data source."""
 
@@ -30,6 +17,7 @@ class SourceEndpoint(BaseModel):
     creds_vault_path: str
     rate_limit_rps: float = 5.0
     timeout: int = 30
+    role: str | None = None  # "primary" | "backup" | "dr" | "secondary" or None (infer from name)
 
 
 class HealthStatus(BaseModel):

@@ -1,0 +1,14 @@
+.venv/
+.git/
+.mypy_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+.coverage
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.env
+*.tgz
+charts/api-to-splunk/tests/
