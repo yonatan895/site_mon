@@ -1,3 +1,9 @@
+image:
+  registry: ghcr.io
+  repository: yonatan895/site_mon/site-mon
+  tag: latest
+  pullPolicy: IfNotPresent
+
 replicaCount: 2
 
 poller:
