@@ -1,5 +1,6 @@
 """Endpoint health checking with background probing thread."""
 
+import os
 import threading
 import time
 from datetime import UTC, datetime
@@ -97,12 +98,13 @@ class EndpointHealthChecker:
         """
         url = f"{endpoint.url.rstrip('/')}{self.health_path}"
         start_time = time.monotonic()
+        verify_ssl = os.environ.get("VERIFY_SSL", "true").lower() == "true"
 
         try:
             response = requests.get(
                 url,
                 timeout=DEFAULT_HEALTH_TIMEOUT,
-                verify=False,
+                verify=verify_ssl,
             )
             elapsed_ms = (time.monotonic() - start_time) * 1000
 

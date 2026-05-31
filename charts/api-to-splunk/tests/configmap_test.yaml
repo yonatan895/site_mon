@@ -119,6 +119,15 @@ tests:
           path: data.MAX_CONSECUTIVE_FAILURES
           value: "5"
 
+  - it: should set VERIFY_SSL from values
+    set:
+      config:
+        verifySsl: false
+    asserts:
+      - equal:
+          path: data.VERIFY_SSL
+          value: "false"
+
   - it: should have name with -config suffix
     asserts:
       - equal:

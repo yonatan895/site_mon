@@ -2,6 +2,7 @@
 
 import json
 import os
+import signal
 import threading
 import time
 import uuid
@@ -335,8 +336,16 @@ class Poller:
         )
         self.health_checker.start()
 
+        stop_event = threading.Event()
+
+        def _handle_shutdown(signum: int, frame: Any) -> None:
+            logger.info("poller_shutdown_signal", signal=signum)
+            stop_event.set()
+
+        signal.signal(signal.SIGTERM, _handle_shutdown)
+
         try:
-            while True:
+            while not stop_event.is_set():
                 cycle_start = time.monotonic()
                 try:
                     self.run_once()
@@ -349,7 +358,7 @@ class Poller:
                 elapsed = time.monotonic() - cycle_start
                 sleep_time = max(0, interval_seconds - elapsed)
                 logger.debug("polling_sleep", seconds=sleep_time)
-                time.sleep(sleep_time)
+                stop_event.wait(timeout=sleep_time)
         except KeyboardInterrupt:
             logger.info("poller_interrupted")
         finally:
@@ -398,11 +407,12 @@ class HMCClient(BaseAPIClient):
         import zhmcclient
 
         creds = self._load_creds()
+        verify_ssl = os.environ.get("VERIFY_SSL", "true").lower() == "true"
         session = zhmcclient.Session(
             self.endpoint.url,
             creds["username"],
             creds["password"],
-            verify_cert=False,
+            verify_cert=verify_ssl,
             session_id="site_mon_hmc",
         )
         self._client = session
@@ -507,16 +517,22 @@ class HMCClient(BaseAPIClient):
 
         Returns:
             Dictionary with username and password.
+
+        Raises:
+            RuntimeError: If password environment variable is empty.
         """
         platform = self.endpoint.platform.upper()
         site = self.endpoint.site.upper()
         username_key = f"{platform}_{site}_USERNAME"
         password_key = f"{platform}_{site}_PASSWORD"
 
-        return {
-            "username": os.environ.get(username_key, "admin"),
-            "password": os.environ.get(password_key, ""),
-        }
+        username = os.environ.get(username_key, "admin")
+        password = os.environ.get(password_key, "")
+        if not password:
+            raise RuntimeError(
+                f"Missing required credential: {password_key} for endpoint {self.endpoint.name}"
+            )
+        return {"username": username, "password": password}
 
 
 class DS8000Client(BaseAPIClient):
