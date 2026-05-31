@@ -196,6 +196,7 @@ class TestInitHealth:
 class TestPrometheusMetrics:
     def test_update_prometheus_metrics(self) -> None:
         import src.health as health_mod
+
         if not health_mod.PROMETHEUS_AVAILABLE:
             pytest.skip("prometheus_client not installed")
 

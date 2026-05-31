@@ -71,6 +71,7 @@ class TestCleanup:
 class TestRunForever:
     def test_empty_loop_iterates(self, sender: Sender) -> None:
         import time
+
         stopped = threading.Event()
 
         def stop_later():
@@ -152,7 +153,13 @@ class TestRunForever:
 class TestSenderInit:
     def test_env_vars_used(self, spool_manager) -> None:
         with (
-            patch.dict(os.environ, {"SPLUNK_HEC_URL": "https://custom.example.com:8088", "SPLUNK_HEC_TOKEN": "env-token"}),
+            patch.dict(
+                os.environ,
+                {
+                    "SPLUNK_HEC_URL": "https://custom.example.com:8088",
+                    "SPLUNK_HEC_TOKEN": "env-token",
+                },
+            ),
             patch("src.sender.SplunkHECClient") as mock_hec,
         ):
             mock_hec.return_value = MagicMock()
@@ -167,7 +174,9 @@ class TestSenderInit:
             patch("src.sender.SplunkHECClient") as mock_hec,
         ):
             mock_hec.return_value = MagicMock()
-            s = Sender(spool_dir=spool_manager.spool_dir, hec_url="https://explicit.example.com:8088")
+            s = Sender(
+                spool_dir=spool_manager.spool_dir, hec_url="https://explicit.example.com:8088"
+            )
             assert s.hec_url == "https://explicit.example.com:8088"
             s.hec_client.close()
 
@@ -175,7 +184,15 @@ class TestSenderInit:
 class TestSenderMain:
     def test_main_sets_up_sender(self, tmp_path) -> None:
         with (
-            patch.dict(os.environ, {"SPOOL_DIR": str(tmp_path / "spool"), "SPLUNK_HEC_URL": "https://splunk.test:8088", "SPLUNK_HEC_TOKEN": "test-token", "HEALTH_PORT": "9191"}),
+            patch.dict(
+                os.environ,
+                {
+                    "SPOOL_DIR": str(tmp_path / "spool"),
+                    "SPLUNK_HEC_URL": "https://splunk.test:8088",
+                    "SPLUNK_HEC_TOKEN": "test-token",
+                    "HEALTH_PORT": "9191",
+                },
+            ),
             patch("src.sender.uvicorn"),
             patch("src.sender.SplunkHECClient") as mock_hec,
             patch("src.sender.Sender.run_forever") as mock_run,
@@ -183,5 +200,6 @@ class TestSenderMain:
             mock_hec.return_value = MagicMock()
             mock_run.side_effect = SystemExit
             from src.sender import main as sender_main
+
             with contextlib.suppress(SystemExit):
                 sender_main()
