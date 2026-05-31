@@ -3,7 +3,6 @@
 from pathlib import Path
 from typing import Any
 
-import structlog
 import yaml
 
 from .models import (
@@ -42,7 +41,7 @@ class RulesLoader:
         if not filepath.exists():
             logger.warning("yaml_file_not_found", path=str(filepath))
             return {}
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         logger.debug("yaml_loaded", path=str(filepath))
         return data

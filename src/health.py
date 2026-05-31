@@ -1,18 +1,15 @@
 """Health, readiness, and metrics endpoints for the monitoring pipeline."""
 
-import time
-from datetime import datetime, timezone
-from typing import Any, Callable, Optional
-
-import structlog
+from datetime import UTC, datetime
+from typing import Any
 
 from .utils import setup_logging
 
 logger = setup_logging(__name__)
 
 # Global references set by the running component (poller or sender)
-health_checker: Optional[Any] = None
-spool_manager: Optional[Any] = None
+health_checker: Any | None = None
+spool_manager: Any | None = None
 
 # Metrics storage
 _metrics_store: dict[str, Any] = {
@@ -28,7 +25,7 @@ _metrics_store: dict[str, Any] = {
 
 # Try to use prometheus_client if available, otherwise use simple counters
 try:
-    from prometheus_client import Counter, Gauge, Histogram, generate_latest, REGISTRY
+    from prometheus_client import REGISTRY, Counter, Gauge, Histogram, generate_latest
 
     PROMETHEUS_AVAILABLE = True
 
@@ -96,7 +93,7 @@ def _build_app() -> Any:
         """
         return JSONResponse({
             "status": "ok",
-            "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            "timestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
         })
 
     async def readyz(request: Any) -> JSONResponse:
@@ -152,20 +149,20 @@ def _build_app() -> Any:
         lines = []
         if spool_manager is not None:
             stats = spool_manager.get_spool_stats()
-            lines.append(f"# HELP site_mon_spool_pending_count Number of pending spool files")
-            lines.append(f"# TYPE site_mon_spool_pending_count gauge")
+            lines.append("# HELP site_mon_spool_pending_count Number of pending spool files")
+            lines.append("# TYPE site_mon_spool_pending_count gauge")
             lines.append(f"site_mon_spool_pending_count {stats['pending_count']}")
-            lines.append(f"# HELP site_mon_spool_size_mb Total spool size in MB")
-            lines.append(f"# TYPE site_mon_spool_size_mb gauge")
+            lines.append("# HELP site_mon_spool_size_mb Total spool size in MB")
+            lines.append("# TYPE site_mon_spool_size_mb gauge")
             lines.append(f"site_mon_spool_size_mb {stats['total_size_mb']}")
-            lines.append(f"# HELP site_mon_spool_dead_letter_count Dead letter file count")
-            lines.append(f"# TYPE site_mon_spool_dead_letter_count gauge")
+            lines.append("# HELP site_mon_spool_dead_letter_count Dead letter file count")
+            lines.append("# TYPE site_mon_spool_dead_letter_count gauge")
             lines.append(f"site_mon_spool_dead_letter_count {stats['dead_letter_count']}")
 
         if health_checker is not None:
             all_statuses = health_checker.get_all_statuses()
-            lines.append(f"# HELP site_mon_endpoint_health_status Endpoint health (1=healthy, 0=unhealthy)")
-            lines.append(f"# TYPE site_mon_endpoint_health_status gauge")
+            lines.append("# HELP site_mon_endpoint_health_status Endpoint health (1=healthy, 0=unhealthy)")
+            lines.append("# TYPE site_mon_endpoint_health_status gauge")
             for name, status in all_statuses.items():
                 lines.append(
                     f'site_mon_endpoint_health_status{{endpoint="{name}"}} '

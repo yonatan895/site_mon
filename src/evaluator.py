@@ -2,11 +2,10 @@
 
 import operator
 import re
-from datetime import datetime, timezone
-from typing import Any, Union
+from datetime import UTC, datetime
+from typing import Any
 
 import jmespath
-import structlog
 
 from .models import (
     FieldExtraction,
@@ -57,9 +56,9 @@ class Evaluator:
     def evaluate(
         self,
         data_type: str,
-        raw_data: Union[dict[str, Any], list[dict[str, Any]]],
+        raw_data: dict[str, Any] | list[dict[str, Any]],
         endpoint_name: str,
-    ) -> Union[PollingEvent, list[PollingEvent]]:
+    ) -> PollingEvent | list[PollingEvent]:
         """Evaluate raw API response data against configured rules.
 
         Args:
@@ -138,7 +137,7 @@ class Evaluator:
             data_type=data_type,
             sourcetype=rule.sourcetype,
             index=rule.index,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             fields=fields,
             alerts=alerts,
             raw_response_metadata=metadata,
@@ -169,7 +168,12 @@ class Evaluator:
         fields: dict[str, Any] = {}
         for extraction in extractions:
             try:
-                value = jmespath.search(extraction.json_path, raw_item)
+                expression = extraction.json_path
+                if expression.startswith("$."):
+                    expression = expression[2:]
+                elif expression.startswith("$"):
+                    expression = expression[1:]
+                value = jmespath.search(expression, raw_item)
                 if value is None and extraction.default is not None:
                     value = extraction.default
                 if value is not None and extraction.transform:
@@ -249,10 +253,10 @@ class Evaluator:
 
         if operator_name in OPERATOR_FUNCTIONS:
             try:
-                return OPERATOR_FUNCTIONS[operator_name](field_value, rule.value)
+                return bool(OPERATOR_FUNCTIONS[operator_name](field_value, rule.value))
             except TypeError:
-                return OPERATOR_FUNCTIONS[operator_name](
-                    str(field_value), rule.value
+                return bool(
+                    OPERATOR_FUNCTIONS[operator_name](str(field_value), rule.value)
                 )
 
         if operator_name == "contains":

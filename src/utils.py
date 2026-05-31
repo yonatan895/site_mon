@@ -1,13 +1,15 @@
 """Utility functions for the monitoring pipeline."""
 
 import json
+import logging
 import os
 import random
 import re
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
 import structlog
 from tenacity import (
@@ -44,7 +46,7 @@ def setup_logging(name: str) -> structlog.BoundLogger:
         wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=True,
     )
-    return structlog.get_logger(name)
+    return structlog.get_logger(name)  # type: ignore[no-any-return]
 
 
 def atomic_write(filepath: str, data: dict[str, Any] | list[Any]) -> None:
@@ -80,8 +82,8 @@ def atomic_read(filepath: str) -> dict[str, Any] | list[Any]:
         FileNotFoundError: If the file does not exist.
         json.JSONDecodeError: If the file contains invalid JSON.
     """
-    with open(filepath, "r", encoding="utf-8") as f:
-        return json.load(f)
+    with open(filepath, encoding="utf-8") as f:
+        return json.load(f)  # type: ignore[no-any-return]
 
 
 def ensure_dir(path: str) -> None:
@@ -93,7 +95,7 @@ def ensure_dir(path: str) -> None:
     Path(path).mkdir(parents=True, exist_ok=True)
 
 
-def format_timestamp(dt: Optional[datetime] = None) -> str:
+def format_timestamp(dt: datetime | None = None) -> str:
     """Return an ISO 8601 formatted timestamp with microseconds.
 
     Args:
@@ -103,7 +105,7 @@ def format_timestamp(dt: Optional[datetime] = None) -> str:
         ISO 8601 string with microseconds and 'Z' suffix.
     """
     if dt is None:
-        dt = datetime.now(timezone.utc)
+        dt = datetime.now(UTC)
     return dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
@@ -119,15 +121,26 @@ def calculate_backoff(attempt: int, base: float = 1, max_wait: float = 64) -> fl
         Computed backoff duration in seconds.
     """
     wait = min(max_wait, base * (2**attempt))
-    jitter = random.uniform(0, wait * 0.5)
-    return wait + jitter
+    jitter: float = random.uniform(0, wait * 0.5)
+    result: float = wait + jitter
+    return result
+
+
+_utils_logger = None
+
+
+def _get_utils_logger() -> structlog.BoundLogger:
+    global _utils_logger
+    if _utils_logger is None:
+        _utils_logger = setup_logging("src.utils")
+    return _utils_logger
 
 
 def retry_with_backoff(
     max_attempts: int = 5,
     base_delay: float = 1.0,
     max_delay: float = 64.0,
-) -> Callable:
+) -> Callable[..., Any]:
     """Decorator that applies retry logic with exponential backoff and jitter.
 
     Uses tenacity under the hood.
@@ -141,14 +154,14 @@ def retry_with_backoff(
         A decorator that wraps a function with retry logic.
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         @retry(
             stop=stop_after_attempt(max_attempts),
             wait=wait_exponential_jitter(
                 initial=base_delay, max=max_delay, jitter=base_delay
             ),
-            before_sleep=before_sleep_log(structlog.get_logger(), "warning"),
+            before_sleep=before_sleep_log(_get_utils_logger(), logging.WARNING),
             reraise=True,
         )
         def wrapper(*args: Any, **kwargs: Any) -> Any:

@@ -2,11 +2,9 @@
 
 import threading
 import time
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 import requests
-import structlog
 
 from .models import HealthStatus, SourceEndpoint
 from .utils import setup_logging
@@ -43,7 +41,7 @@ class EndpointHealthChecker:
         self._statuses: dict[str, HealthStatus] = {}
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
 
         for ep in endpoints:
             self._statuses[ep.name] = HealthStatus(endpoint_name=ep.name)
@@ -116,7 +114,7 @@ class EndpointHealthChecker:
 
             with self._lock:
                 status = self._statuses[endpoint.name]
-                status.last_check = datetime.now(timezone.utc)
+                status.last_check = datetime.now(UTC)
                 status.response_time_ms = elapsed_ms
 
                 if is_healthy:
@@ -135,21 +133,21 @@ class EndpointHealthChecker:
         except requests.exceptions.Timeout:
             with self._lock:
                 status = self._statuses[endpoint.name]
-                status.last_check = datetime.now(timezone.utc)
+                status.last_check = datetime.now(UTC)
                 status.response_time_ms = (time.monotonic() - start_time) * 1000
                 self._record_failure(endpoint, status, "timeout")
 
         except requests.exceptions.ConnectionError as e:
             with self._lock:
                 status = self._statuses[endpoint.name]
-                status.last_check = datetime.now(timezone.utc)
+                status.last_check = datetime.now(UTC)
                 status.response_time_ms = None
                 self._record_failure(endpoint, status, f"connection_error: {e}")
 
         except Exception as e:
             with self._lock:
                 status = self._statuses[endpoint.name]
-                status.last_check = datetime.now(timezone.utc)
+                status.last_check = datetime.now(UTC)
                 status.response_time_ms = None
                 self._record_failure(endpoint, status, f"error: {e}")
 
@@ -167,7 +165,7 @@ class EndpointHealthChecker:
         status.is_healthy = False
 
         if status.degraded_since is None:
-            status.degraded_since = datetime.now(timezone.utc)
+            status.degraded_since = datetime.now(UTC)
 
         if status.consecutive_failures >= status.max_consecutive_failures:
             logger.error(

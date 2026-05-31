@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-import structlog
-
 from .models import SiteConfig, SourceEndpoint
 from .utils import setup_logging
 
@@ -177,7 +175,6 @@ def _endpoint_is_primary(endpoint: SourceEndpoint, site_name: str) -> bool:
     name_lower = endpoint.name.lower()
     if "primary" in name_lower or "_pri" in name_lower:
         return True
-    if "backup" in name_lower or "dr" in name_lower or "secondary" in name_lower:
-        return False
-    # Default: first endpoint is primary
-    return True
+    return not (
+        "backup" in name_lower or "dr" in name_lower or "secondary" in name_lower
+    )

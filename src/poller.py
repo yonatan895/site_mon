@@ -6,15 +6,15 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 import uvicorn
 
 from .endpoint_health import EndpointHealthChecker
 from .evaluator import Evaluator
-from .models import PollingEvent, PlatformRule, SourceEndpoint
+from .models import PlatformRule, PollingEvent, SourceEndpoint
 from .rules_loader import RulesLoader
 from .source_selector import SourceSelector
 from .spool import SpoolManager
@@ -167,7 +167,7 @@ class Poller:
         endpoint: SourceEndpoint,
         data_type: str,
         platform_rule: PlatformRule,
-    ) -> Optional[Any]:
+    ) -> Any | None:
         """Query an endpoint for a specific data type and evaluate results.
 
         Args:
@@ -273,7 +273,7 @@ class Poller:
     ) -> dict[str, Any]:
         """Convert a raw dict to a Splunk HEC event dict."""
         return {
-            "time": datetime.now(timezone.utc).strftime("%s.%f"),
+            "time": datetime.now(UTC).strftime("%s.%f"),
             "host": endpoint.name,
             "source": f"{endpoint.platform}:data",
             "sourcetype": event_dict.get(
@@ -836,7 +836,7 @@ class TS7700Client(BaseAPIClient):
 
     def __init__(self, endpoint: SourceEndpoint) -> None:
         super().__init__(endpoint)
-        self._session = None
+        self._session: Any | None = None
 
     def _get_session(self) -> Any:
         """Get or create a requests session with auth.
@@ -926,7 +926,8 @@ def main() -> None:
 
     poller = Poller(platform=platform, rules_dir=rules_dir, spool_dir=spool_dir)
 
-    from .health import app as health_app, init_health
+    from .health import app as health_app
+    from .health import init_health
     init_health(
         health_checker_instance=poller.health_checker,
         spool_manager_instance=poller.spool_manager,

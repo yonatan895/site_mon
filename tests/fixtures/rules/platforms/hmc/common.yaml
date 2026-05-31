@@ -1,0 +1,9 @@
+platform: hmc
+
+common_fields:
+  platform: hmc
+
+metric_prefix: "hmc"
+default_sourcetype: "hmc:metrics"
+default_index: "mainframe_metrics"
+interval_seconds: 300

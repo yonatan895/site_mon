@@ -1,0 +1,151 @@
+suite: configmap
+release:
+  name: test-release
+  namespace: test-ns
+templates:
+  - configmap.yaml
+tests:
+  - it: should set PLATFORM from values
+    set:
+      global:
+        platform: hmc
+    asserts:
+      - equal:
+          path: data.PLATFORM
+          value: "hmc"
+
+  - it: should set POLL_INTERVAL_SECONDS from values
+    set:
+      global:
+        platform: ds
+      config:
+        pollIntervalSeconds: 600
+    asserts:
+      - equal:
+          path: data.POLL_INTERVAL_SECONDS
+          value: "600"
+
+  - it: should set SPLUNK_HEC_URL from values
+    set:
+      global:
+        platform: hmc
+      config:
+        hec:
+          url: "https://splunk.example.com:8088"
+    asserts:
+      - equal:
+          path: data.SPLUNK_HEC_URL
+          value: "https://splunk.example.com:8088"
+
+  - it: should set SPLUNK_HEC_BATCH_SIZE
+    set:
+      global:
+        platform: hmc
+      config:
+        hec:
+          batchSize: 500
+    asserts:
+      - equal:
+          path: data.SPLUNK_HEC_BATCH_SIZE
+          value: "500"
+
+  - it: should set SPLUNK_HEC_ACK_ENABLED
+    set:
+      global:
+        platform: hmc
+      config:
+        hec:
+          ackEnabled: true
+    asserts:
+      - equal:
+          path: data.SPLUNK_HEC_ACK_ENABLED
+          value: "true"
+
+  - it: should set SPLUNK_HEC_MAX_CONNECTIONS
+    set:
+      global:
+        platform: hmc
+      config:
+        hec:
+          maxConnections: 20
+    asserts:
+      - equal:
+          path: data.SPLUNK_HEC_MAX_CONNECTIONS
+          value: "20"
+
+  - it: should set SPLUNK_HEC_TIMEOUT
+    set:
+      global:
+        platform: hmc
+      config:
+        hec:
+          timeout: 60
+    asserts:
+      - equal:
+          path: data.SPLUNK_HEC_TIMEOUT
+          value: "60"
+
+  - it: should set SPOOL_MAX_SIZE_MB
+    set:
+      global:
+        platform: hmc
+      config:
+        spool:
+          maxSizeMb: 2048
+    asserts:
+      - equal:
+          path: data.SPOOL_MAX_SIZE_MB
+          value: "2048"
+
+  - it: should set SPOOL_DIR to /spool
+    set:
+      global:
+        platform: hmc
+    asserts:
+      - equal:
+          path: data.SPOOL_DIR
+          value: "/spool"
+
+  - it: should set RULES_DIR to /rules
+    set:
+      global:
+        platform: hmc
+    asserts:
+      - equal:
+          path: data.RULES_DIR
+          value: "/rules"
+
+  - it: should set LOG_LEVEL from values
+    set:
+      global:
+        platform: hmc
+      config:
+        logLevel: "WARNING"
+    asserts:
+      - equal:
+          path: data.LOG_LEVEL
+          value: "WARNING"
+
+  - it: should set health probe config
+    set:
+      global:
+        platform: hmc
+      config:
+        healthProbeInterval: 30
+        maxConsecutiveFailures: 5
+    asserts:
+      - equal:
+          path: data.HEALTH_PROBE_INTERVAL
+          value: "30"
+      - equal:
+          path: data.MAX_CONSECUTIVE_FAILURES
+          value: "5"
+
+  - it: should have name with -config suffix
+    set:
+      global:
+        platform: hmc
+    asserts:
+      - equal:
+          path: metadata.name
+          value: test-release-api-to-splunk-hmc-config
