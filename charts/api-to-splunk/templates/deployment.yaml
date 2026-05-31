@@ -21,6 +21,7 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
+        fsGroup: {{ .Values.securityContext.fsGroup }}
       containers:
         - name: poller
           image: {{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}

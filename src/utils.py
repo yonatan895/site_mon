@@ -29,6 +29,10 @@ def setup_logging(name: str) -> structlog.BoundLogger:
     Returns:
         A bound structlog logger instance.
     """
+    logging.basicConfig(
+        level=getattr(logging, os.environ.get("LOG_LEVEL", "INFO"), logging.INFO),
+        format="%(message)s",
+    )
     structlog.configure(
         processors=[
             structlog.stdlib.filter_by_level,
