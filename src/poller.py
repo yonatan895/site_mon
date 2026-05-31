@@ -91,7 +91,8 @@ class Poller:
 
         ndjson_lines: list[str] = []
 
-        with ThreadPoolExecutor(max_workers=5) as executor:
+        max_workers = int(os.environ.get("POLL_MAX_WORKERS", "5"))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {}
 
             for endpoint in active_endpoints:

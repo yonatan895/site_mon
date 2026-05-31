@@ -30,6 +30,7 @@ sender:
 
 config:
   pollIntervalSeconds: 300
+  pollMaxWorkers: 5
   hec:
     url: "https://splunk-hec.example.com:8088"
     batchSize: 500
