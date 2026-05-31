@@ -1,5 +1,16 @@
 # AGENTS.md — Mainframe Infrastructure Monitoring Pipeline
 
+## Agent workflow
+
+Every change goes through a PR. Never push directly to `main`.
+
+1. `git fetch origin && git checkout main && git pull origin main`
+2. `git checkout -b <prefix>/<description>` — use `feat/`, `fix/`, `audit/`, or `refactor/`
+3. Implement the change with comprehensive tests
+4. `make all` — must pass (lint → typecheck → test-cov)
+5. `git add` relevant files, commit, `git push -u origin <branch>`
+6. `gh pr create --base main` — open PR for review
+
 ## Dev commands
 
 ```
