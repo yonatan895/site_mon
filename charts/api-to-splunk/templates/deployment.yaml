@@ -76,8 +76,12 @@ spec:
             - configMapRef:
                 name: {{ include "api-to-splunk.fullname" . }}-config
           {{- if .Values.vault.enabled }}
-            - secretRef:
-                name: {{ .Values.vault.secretName | default "api-to-splunk-secrets" }}
+          env:
+            - name: SPLUNK_HEC_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.vault.secretName | default "api-to-splunk-secrets" }}
+                  key: SPLUNK_HEC_TOKEN
           {{- end }}
           ports:
             - containerPort: 8081

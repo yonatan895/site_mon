@@ -156,7 +156,7 @@ tests:
           path: spec.template.spec.containers[1].ports[0].protocol
           value: TCP
 
-  - it: should include vault secretRef when enabled
+  - it: should include vault secretRef for poller when enabled
     set:
       vault:
         enabled: true
@@ -165,7 +165,19 @@ tests:
           path: spec.template.spec.containers[0].envFrom[1].secretRef.name
           value: api-to-splunk-secrets
 
-  - it: should not include vault secretRef when disabled
+  - it: should include SPLUNK_HEC_TOKEN env in sender when enabled
+    set:
+      vault:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].env[0].name
+          value: SPLUNK_HEC_TOKEN
+      - equal:
+          path: spec.template.spec.containers[1].env[0].valueFrom.secretKeyRef.key
+          value: SPLUNK_HEC_TOKEN
+
+  - it: should not include vault secretRef for poller when disabled
     set:
       vault:
         enabled: false
@@ -174,6 +186,14 @@ tests:
           path: spec.template.spec.containers[0].envFrom[0]
       - notExists:
           path: spec.template.spec.containers[0].envFrom[1]
+
+  - it: should not include SPLUNK_HEC_TOKEN env in sender when disabled
+    set:
+      vault:
+        enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[1].env
 
   - it: should have spool PVC volume
     asserts:
