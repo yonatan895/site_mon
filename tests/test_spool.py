@@ -1,5 +1,6 @@
 import os
 import time
+from pathlib import Path
 
 import pytest
 
@@ -202,3 +203,26 @@ class TestMoveToDeadLetter:
 
     def test_nonexistent_file_no_error(self, spool_manager: SpoolManager) -> None:
         spool_manager.move_to_dead_letter("/nonexistent/path")
+
+
+class TestCrossInstanceSpoolSize:
+    def test_two_instances_see_each_others_files(self, tmp_path: Path) -> None:
+        d = str(tmp_path)
+        writer = SpoolManager(spool_dir=d, max_spool_size_mb=10)
+        reader = SpoolManager(spool_dir=d, max_spool_size_mb=10)
+
+        writer.write_ndjson('{"a": 1}\n', batch_id="cross1")
+        writer.write_ndjson('{"b": 2}\n', batch_id="cross2")
+
+        assert writer._get_spool_size() > 0
+        assert reader._get_spool_size() == writer._get_spool_size()
+
+        pending = reader.list_pending()
+        assert len(pending) == 2
+
+        entries = reader.read_ndjson_batch(max_files=2)
+        assert len(entries) == 2
+
+        size_before_ack = writer._get_spool_size()
+        reader.ack_file(entries[0].filename)
+        assert writer._get_spool_size() < size_before_ack
