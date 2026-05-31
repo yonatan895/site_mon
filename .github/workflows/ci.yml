@@ -32,6 +32,7 @@ jobs:
           context: .
           build-args: INSTALL_DEV=true
           load: true
+          no-cache: true
           tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
       - name: Lint - ruff check
