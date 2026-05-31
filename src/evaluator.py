@@ -72,7 +72,6 @@ class Evaluator:
             A single PollingEvent or list of PollingEvent objects with alerts.
         """
         sc = site_config or self.site_config
-        sc = site_config or self.site_config
         if not sc:
             raise ValueError("site_config is required for evaluation")
 
@@ -222,12 +221,18 @@ class Evaluator:
 
                 breached = self._evaluate_threshold(field_value, rule)
                 if breached:
-                    message = rule.message_template.format(
-                        field=rule.field,
-                        value=field_value,
-                        threshold=rule.value,
-                        **fields,
-                    )
+                    safe_fields = {
+                        k: v for k, v in fields.items() if k not in ("field", "value", "threshold")
+                    }
+                    try:
+                        message = rule.message_template.format(
+                            field=rule.field,
+                            value=field_value,
+                            threshold=rule.value,
+                            **safe_fields,
+                        )
+                    except (KeyError, ValueError, IndexError, AttributeError):
+                        message = rule.message_template
                     alerts.append(
                         {
                             "field": rule.field,
