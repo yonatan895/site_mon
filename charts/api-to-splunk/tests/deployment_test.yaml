@@ -206,9 +206,8 @@ tests:
       vault:
         enabled: false
     asserts:
-      - equal:
-          path: spec.template.spec.containers[0].envFrom
-          count: 1
+      - exists:
+          path: spec.template.spec.containers[0].envFrom[0]
       - notExists:
           path: spec.template.spec.containers[0].envFrom[1]
 
