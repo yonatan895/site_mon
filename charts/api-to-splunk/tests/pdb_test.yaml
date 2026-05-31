@@ -2,13 +2,14 @@ suite: pdb
 release:
   name: test-release
   namespace: test-ns
+set:
+  global:
+    platform: hmc
 templates:
   - pdb.yaml
 tests:
   - it: should set minAvailable from values
     set:
-      global:
-        platform: hmc
       pdb:
         minAvailable: 1
     asserts:
@@ -18,8 +19,6 @@ tests:
 
   - it: should have correct kind
     set:
-      global:
-        platform: hmc
       pdb:
         minAvailable: 2
     asserts:
@@ -29,8 +28,6 @@ tests:
 
   - it: should have selector labels
     set:
-      global:
-        platform: hmc
       pdb:
         minAvailable: 1
     asserts:
@@ -41,8 +38,6 @@ tests:
 
   - it: should have name from fullname helper
     set:
-      global:
-        platform: hmc
       pdb:
         minAvailable: 1
     asserts:

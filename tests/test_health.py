@@ -1,3 +1,4 @@
+import contextlib
 from unittest.mock import MagicMock
 
 import pytest
@@ -149,6 +150,51 @@ class TestMetrics:
 
         response = client.get("/metrics")
         assert response.status_code == 200
+
+    def test_prometheus_metrics_real(
+        self,
+        client: TestClient,
+        spool_manager_mock: MagicMock,
+        health_checker_mock: MagicMock,
+    ) -> None:
+        import src.health as health_mod
+
+        if not health_mod.PROMETHEUS_AVAILABLE:
+            pytest.skip("prometheus_client not installed")
+
+        from prometheus_client import REGISTRY
+
+        for collector in (
+            health_mod.spool_pending,
+            health_mod.spool_size,
+            health_mod.spool_dead_letter,
+            health_mod.endpoint_health,
+        ):
+            with contextlib.suppress(ValueError):
+                REGISTRY.register(collector)
+
+        health_mod.spool_manager = spool_manager_mock
+        health_mod.health_checker = health_checker_mock
+
+        response = client.get("/metrics")
+        assert response.status_code == 200
+        text = response.text
+
+        assert "# HELP site_mon_spool_pending_count" in text
+        assert "# TYPE site_mon_spool_pending_count gauge" in text
+        assert "site_mon_spool_pending_count 5.0" in text
+
+        assert "# HELP site_mon_spool_size_mb" in text
+        assert "# TYPE site_mon_spool_size_mb gauge" in text
+        assert "site_mon_spool_size_mb 50.0" in text
+
+        assert "# HELP site_mon_endpoint_health" in text
+        assert "# TYPE site_mon_endpoint_health gauge" in text
+        assert 'site_mon_endpoint_health{endpoint="ep1"} 1.0' in text
+        assert 'site_mon_endpoint_health{endpoint="ep2"} 1.0' in text
+
+        spool_manager_mock.get_spool_stats.assert_called()
+        health_checker_mock.get_all_statuses.assert_called()
 
 
 class TestInitHealth:

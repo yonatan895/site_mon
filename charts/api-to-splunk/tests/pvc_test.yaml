@@ -2,13 +2,13 @@ suite: pvc
 release:
   name: test-release
   namespace: test-ns
+set:
+  global:
+    platform: hmc
 templates:
   - pvc.yaml
 tests:
   - it: should have ReadWriteOnce access
-    set:
-      global:
-        platform: hmc
     asserts:
       - contains:
           path: spec.accessModes
@@ -16,8 +16,6 @@ tests:
 
   - it: should use default size 1Gi
     set:
-      global:
-        platform: hmc
       pvc:
         size: 1Gi
     asserts:
@@ -27,8 +25,6 @@ tests:
 
   - it: should use production size 5Gi
     set:
-      global:
-        platform: hmc
       pvc:
         size: 5Gi
     asserts:
@@ -37,9 +33,6 @@ tests:
           value: 5Gi
 
   - it: should have name with -spool suffix
-    set:
-      global:
-        platform: hmc
     asserts:
       - equal:
           path: metadata.name
@@ -47,8 +40,6 @@ tests:
 
   - it: should not include storageClassName when empty
     set:
-      global:
-        platform: hmc
       pvc:
         storageClassName: ""
     asserts:
@@ -57,8 +48,6 @@ tests:
 
   - it: should include storageClassName when set
     set:
-      global:
-        platform: hmc
       pvc:
         storageClassName: fast-ssd
     asserts:
