@@ -70,7 +70,7 @@ spec:
                 name: {{ include "api-to-splunk.fullname" . }}-config
           {{- if .Values.vault.enabled }}
             - secretRef:
-                name: api-to-splunk-secrets
+                name: {{ .Values.vault.secretName | default "api-to-splunk-secrets" }}
           {{- end }}
           ports:
             - containerPort: 8081

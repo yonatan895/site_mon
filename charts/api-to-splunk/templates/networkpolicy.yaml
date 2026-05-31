@@ -22,30 +22,20 @@ spec:
       ports:
         - protocol: UDP
           port: 53
+    {{- if .Values.networkPolicy.splunkHecCidrs }}
+    {{- range .Values.networkPolicy.splunkHecCidrs }}
     - to:
-        - namespaceSelector: {}
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: {{ include "api-to-splunk.name" . }}
-      ports:
-        - protocol: TCP
-          port: {{ .Values.service.targetPort }}
-        - protocol: TCP
-          port: 8081
-    {{- if .Values.networkPolicy.splunkHecEndpoint }}
-    - to:
-        - namespaceSelector: {}
-          podSelector:
-            matchLabels:
-              app: splunk-hec
+        - ipBlock:
+            cidr: {{ . | quote }}
       ports:
         - protocol: TCP
           port: 8088
     {{- end }}
-    {{- range .Values.networkPolicy.apiEndpoints }}
+    {{- end }}
+    {{- range .Values.networkPolicy.apiEndpointCidrs }}
     - to:
-        - namespaceSelector: {}
+        - ipBlock:
+            cidr: {{ . | quote }}
       ports:
         - protocol: TCP
           port: 443

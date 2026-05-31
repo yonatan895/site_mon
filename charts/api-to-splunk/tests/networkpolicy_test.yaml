@@ -12,8 +12,8 @@ tests:
     set:
       networkPolicy:
         enabled: true
-        splunkHecEndpoint: "splunk-hec.example.com"
-        apiEndpoints: []
+        splunkHecCidrs: []
+        apiEndpointCidrs: []
     asserts:
       - equal:
           path: kind
@@ -34,8 +34,8 @@ tests:
     set:
       networkPolicy:
         enabled: true
-        splunkHecEndpoint: "splunk-hec.example.com"
-        apiEndpoints: []
+        splunkHecCidrs: []
+        apiEndpointCidrs: []
     asserts:
       - contains:
           path: spec.egress
@@ -47,50 +47,58 @@ tests:
               - protocol: UDP
                 port: 53
 
-  - it: should include Splunk HEC egress rule when endpoint set
+  - it: should include Splunk HEC egress rule when CIDRs set
     set:
       networkPolicy:
         enabled: true
-        splunkHecEndpoint: "splunk-hec.example.com"
-        apiEndpoints: []
+        splunkHecCidrs:
+          - 10.0.0.0/8
+        apiEndpointCidrs: []
     asserts:
       - contains:
           path: spec.egress
           content:
             to:
-              - namespaceSelector: {}
-                podSelector:
-                  matchLabels:
-                    app: splunk-hec
+              - ipBlock:
+                  cidr: 10.0.0.0/8
             ports:
               - protocol: TCP
                 port: 8088
 
-  - it: should include API endpoint egress rules
+  - it: should include API endpoint egress rules for CIDRs
     set:
       networkPolicy:
         enabled: true
-        splunkHecEndpoint: "splunk-hec.example.com"
-        apiEndpoints:
-          - name: hmc-primary
-          - name: hmc-backup
+        splunkHecCidrs: []
+        apiEndpointCidrs:
+          - 192.168.1.0/24
+          - 172.16.0.0/12
     asserts:
       - contains:
           path: spec.egress
           content:
             to:
-              - namespaceSelector: {}
+              - ipBlock:
+                  cidr: 192.168.1.0/24
             ports:
               - protocol: TCP
                 port: 443
-          count: 2
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - ipBlock:
+                  cidr: 172.16.0.0/12
+            ports:
+              - protocol: TCP
+                port: 443
 
   - it: should have policyTypes ingress and egress
     set:
       networkPolicy:
         enabled: true
-        splunkHecEndpoint: "splunk-hec.example.com"
-        apiEndpoints: []
+        splunkHecCidrs: []
+        apiEndpointCidrs: []
     asserts:
       - contains:
           path: spec.policyTypes

@@ -8,11 +8,11 @@ set:
 templates:
   - pvc.yaml
 tests:
-  - it: should have ReadWriteOnce access
+  - it: should have ReadWriteMany access
     asserts:
       - contains:
           path: spec.accessModes
-          content: ReadWriteOnce
+          content: ReadWriteMany
 
   - it: should use default size 1Gi
     set:

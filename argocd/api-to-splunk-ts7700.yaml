@@ -19,9 +19,8 @@ spec:
         vault:
           secretName: "api-to-splunk-ts7700-secrets"
         networkPolicy:
-          apiEndpoints:
-            - ts7700-primary.example.com
-            - ts7700-backup.example.com
+          splunkHecCidrs: []
+          apiEndpointCidrs: []
   destination:
     server: https://kubernetes.default.svc
     namespace: mainframe-monitoring
