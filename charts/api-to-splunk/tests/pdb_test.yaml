@@ -1,0 +1,51 @@
+suite: pdb
+release:
+  name: test-release
+  namespace: test-ns
+templates:
+  - pdb.yaml
+tests:
+  - it: should set minAvailable from values
+    set:
+      global:
+        platform: hmc
+      pdb:
+        minAvailable: 1
+    asserts:
+      - equal:
+          path: spec.minAvailable
+          value: 1
+
+  - it: should have correct kind
+    set:
+      global:
+        platform: hmc
+      pdb:
+        minAvailable: 2
+    asserts:
+      - equal:
+          path: kind
+          value: PodDisruptionBudget
+
+  - it: should have selector labels
+    set:
+      global:
+        platform: hmc
+      pdb:
+        minAvailable: 1
+    asserts:
+      - exists:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+      - exists:
+          path: spec.selector.matchLabels["app.kubernetes.io/instance"]
+
+  - it: should have name from fullname helper
+    set:
+      global:
+        platform: hmc
+      pdb:
+        minAvailable: 1
+    asserts:
+      - equal:
+          path: metadata.name
+          value: test-release-api-to-splunk-hmc

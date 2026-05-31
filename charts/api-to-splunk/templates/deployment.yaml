@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "api-to-splunk.fullname" . }}
+  labels:
+    {{- include "api-to-splunk.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "api-to-splunk.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "api-to-splunk.selectorLabels" . | nindent 8 }}
+      annotations:
+        {{- toYaml .Values.podAnnotations | nindent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+        - name: poller
+          image: {{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - "python"
+            - "-m"
+            - "src.poller"
+          envFrom:
+            - configMapRef:
+                name: {{ include "api-to-splunk.fullname" . }}-config
+          {{- if .Values.vault.enabled }}
+            - secretRef:
+                name: api-to-splunk-secrets
+          {{- end }}
+          ports:
+            - containerPort: {{ .Values.service.targetPort }}
+              name: health
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: {{ .Values.service.targetPort }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: {{ .Values.service.targetPort }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.poller.resources | nindent 12 }}
+          volumeMounts:
+            - name: spool
+              mountPath: /spool
+            - name: rules
+              mountPath: /rules
+        - name: sender
+          image: {{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - "python"
+            - "-m"
+            - "src.sender"
+          envFrom:
+            - configMapRef:
+                name: {{ include "api-to-splunk.fullname" . }}-config
+          {{- if .Values.vault.enabled }}
+            - secretRef:
+                name: api-to-splunk-secrets
+          {{- end }}
+          ports:
+            - containerPort: 8081
+              name: health
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.sender.resources | nindent 12 }}
+          volumeMounts:
+            - name: spool
+              mountPath: /spool
+      volumes:
+        - name: spool
+          persistentVolumeClaim:
+            claimName: {{ include "api-to-splunk.fullname" . }}-spool
+        - name: rules
+          configMap:
+            name: {{ .Values.rulesConfigMap.name }}

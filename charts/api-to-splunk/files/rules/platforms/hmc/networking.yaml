@@ -1,0 +1,28 @@
+# HMC Platform - Networking Extraction Rules
+# Collects network adapter configuration and link state information.
+platform: hmc
+sourcetype: "hmc:network"
+index: "mainframe_metrics"
+
+extractions:
+  - field: "adapter_id"
+    json_path: "$.adapter_id"
+  - field: "cpc_name"
+    json_path: "$.cpc_name"
+  - field: "adapter_type"
+    json_path: "$.adapter_type"
+  - field: "port_count"
+    json_path: "$.port_count"
+  - field: "link_state"
+    json_path: "$.link_state"
+  - field: "mac_address"
+    json_path: "$.mac_address"
+  - field: "vswitch_count"
+    json_path: "$.vswitch_count"
+
+thresholds:
+  - field: "link_state"
+    operator: "eq"
+    value: "down"
+    severity: "critical"
+    message_template: "Network adapter {adapter_id} link is down"

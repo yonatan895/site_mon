@@ -1,0 +1,40 @@
+# DS8000 Platform - Replication Extraction Rules
+# Collects replication session state, RPO, and lag metrics.
+platform: ds
+sourcetype: "ds:replication"
+index: "mainframe_metrics"
+
+extractions:
+  - field: "session_id"
+    json_path: "$.session_id"
+  - field: "source_array"
+    json_path: "$.source_array"
+  - field: "target_array"
+    json_path: "$.target_array"
+  - field: "session_type"
+    json_path: "$.session_type"
+  - field: "state"
+    json_path: "$.state"
+  - field: "rpo_seconds"
+    json_path: "$.rpo_seconds"
+  - field: "lag_seconds"
+    json_path: "$.lag_seconds"
+  - field: "consistency_group"
+    json_path: "$.consistency_group"
+
+thresholds:
+  - field: "state"
+    operator: "ne"
+    value: "synchronized"
+    severity: "warning"
+    message_template: "Replication session {session_id} state is {state}"
+  - field: "lag_seconds"
+    operator: "gt"
+    value: 300
+    severity: "warning"
+    message_template: "Replication session {session_id} lag is {lag_seconds}s"
+  - field: "rpo_seconds"
+    operator: "gt"
+    value: 60
+    severity: "info"
+    message_template: "Replication session {session_id} RPO is {rpo_seconds}s"

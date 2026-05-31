@@ -1,0 +1,77 @@
+global:
+  platform: hmc
+  namespace: mainframe-monitoring
+
+image:
+  registry: registry.access.redhat.com
+  repository: ubi9/python-311
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+poller:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+sender:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+config:
+  pollIntervalSeconds: 300
+  hec:
+    url: "https://splunk-hec.example.com:8088"
+    batchSize: 500
+    batchIntervalMs: 200
+    ackEnabled: true
+    maxConnections: 10
+    timeout: 30
+  spool:
+    maxSizeMb: 1024
+    deadLetterMaxAgeHours: 168
+  logLevel: "INFO"
+  healthProbeInterval: 60
+  maxConsecutiveFailures: 3
+
+pvc:
+  storageClassName: ""
+  size: "1Gi"
+
+serviceAccount:
+  create: true
+  name: "api-to-splunk-sa"
+  annotations: {}
+
+vault:
+  enabled: true
+  secretStoreRef: "mainframe-vault-store"
+  secretPath: "secret/mainframe"
+  refreshInterval: "5m"
+
+service:
+  port: 8080
+  targetPort: 8080
+
+pdb:
+  minAvailable: 1
+
+networkPolicy:
+  enabled: true
+  splunkHecEndpoint: "splunk-hec.example.com"
+  apiEndpoints: []
+
+rulesConfigMap:
+  name: "api-to-splunk-rules"
+
+podAnnotations: {}

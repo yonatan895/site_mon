@@ -1,0 +1,33 @@
+# CSM Platform - Replication Extraction Rules
+# Collects volume-level replication sync state and progress metrics.
+platform: csm
+sourcetype: "csm:replication"
+index: "mainframe_metrics"
+
+extractions:
+  - field: "replication_id"
+    json_path: "$.replication_id"
+  - field: "session_id"
+    json_path: "$.session_id"
+  - field: "source_volume"
+    json_path: "$.source_volume"
+  - field: "target_volume"
+    json_path: "$.target_volume"
+  - field: "sync_state"
+    json_path: "$.sync_state"
+  - field: "bytes_remaining"
+    json_path: "$.bytes_remaining"
+  - field: "progress_pct"
+    json_path: "$.progress_pct"
+
+thresholds:
+  - field: "sync_state"
+    operator: "eq"
+    value: "failed"
+    severity: "critical"
+    message_template: "CSM replication for volume {source_volume} failed"
+  - field: "progress_pct"
+    operator: "lt"
+    value: 100
+    severity: "info"
+    message_template: "CSM replication for volume {source_volume} in progress at {progress_pct}%"

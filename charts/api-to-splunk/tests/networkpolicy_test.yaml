@@ -1,0 +1,109 @@
+suite: networkpolicy
+release:
+  name: test-release
+  namespace: test-ns
+templates:
+  - networkpolicy.yaml
+tests:
+  - it: should create NetworkPolicy when enabled
+    set:
+      global:
+        platform: hmc
+      networkPolicy:
+        enabled: true
+        splunkHecEndpoint: "splunk-hec.example.com"
+        apiEndpoints: []
+    asserts:
+      - equal:
+          path: kind
+          value: NetworkPolicy
+      - equal:
+          path: metadata.name
+          value: test-release-api-to-splunk-hmc
+
+  - it: should not create NetworkPolicy when disabled
+    set:
+      global:
+        platform: hmc
+      networkPolicy:
+        enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should allow DNS egress
+    set:
+      global:
+        platform: hmc
+      networkPolicy:
+        enabled: true
+        splunkHecEndpoint: "splunk-hec.example.com"
+        apiEndpoints: []
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - ipBlock:
+                  cidr: 0.0.0.0/0
+            ports:
+              - protocol: UDP
+                port: 53
+
+  - it: should include Splunk HEC egress rule when endpoint set
+    set:
+      global:
+        platform: hmc
+      networkPolicy:
+        enabled: true
+        splunkHecEndpoint: "splunk-hec.example.com"
+        apiEndpoints: []
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - namespaceSelector: {}
+                podSelector:
+                  matchLabels:
+                    app: splunk-hec
+            ports:
+              - protocol: TCP
+                port: 8088
+
+  - it: should include API endpoint egress rules
+    set:
+      global:
+        platform: hmc
+      networkPolicy:
+        enabled: true
+        splunkHecEndpoint: "splunk-hec.example.com"
+        apiEndpoints:
+          - name: hmc-primary
+          - name: hmc-backup
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - namespaceSelector: {}
+            ports:
+              - protocol: TCP
+                port: 443
+          count: 2
+
+  - it: should have policyTypes ingress and egress
+    set:
+      global:
+        platform: hmc
+      networkPolicy:
+        enabled: true
+        splunkHecEndpoint: "splunk-hec.example.com"
+        apiEndpoints: []
+    asserts:
+      - contains:
+          path: spec.policyTypes
+          content: Ingress
+      - contains:
+          path: spec.policyTypes
+          content: Egress

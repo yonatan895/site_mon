@@ -1,0 +1,16 @@
+site_name: backup
+platform: hmc
+is_primary: false
+
+endpoints:
+  - name: hmc-backup
+    url: "https://hmc-backup.example.com"
+    platform: hmc
+    site: backup
+    auth_type: basic
+    creds_vault_path: "secret/mainframe/hmc/backup"
+    rate_limit_rps: 5
+    timeout: 30
+
+data_types:
+  - cpc-stats

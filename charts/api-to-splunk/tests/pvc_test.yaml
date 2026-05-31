@@ -1,0 +1,67 @@
+suite: pvc
+release:
+  name: test-release
+  namespace: test-ns
+templates:
+  - pvc.yaml
+tests:
+  - it: should have ReadWriteOnce access
+    set:
+      global:
+        platform: hmc
+    asserts:
+      - contains:
+          path: spec.accessModes
+          content: ReadWriteOnce
+
+  - it: should use default size 1Gi
+    set:
+      global:
+        platform: hmc
+      pvc:
+        size: 1Gi
+    asserts:
+      - equal:
+          path: spec.resources.requests.storage
+          value: 1Gi
+
+  - it: should use production size 5Gi
+    set:
+      global:
+        platform: hmc
+      pvc:
+        size: 5Gi
+    asserts:
+      - equal:
+          path: spec.resources.requests.storage
+          value: 5Gi
+
+  - it: should have name with -spool suffix
+    set:
+      global:
+        platform: hmc
+    asserts:
+      - equal:
+          path: metadata.name
+          value: test-release-api-to-splunk-hmc-spool
+
+  - it: should not include storageClassName when empty
+    set:
+      global:
+        platform: hmc
+      pvc:
+        storageClassName: ""
+    asserts:
+      - notExists:
+          path: spec.storageClassName
+
+  - it: should include storageClassName when set
+    set:
+      global:
+        platform: hmc
+      pvc:
+        storageClassName: fast-ssd
+    asserts:
+      - equal:
+          path: spec.storageClassName
+          value: fast-ssd

@@ -1,0 +1,18 @@
+# CSM Platform - Source Policy
+# Defines data source failover behavior (dual-active), health checks, and rate limiting.
+platform: csm
+failover_mode: "dual_active"
+
+health_check:
+  path: "/api/v1/health"
+  interval_seconds: 60
+  timeout_seconds: 10
+  max_consecutive_failures: 3
+
+data_types:
+  - sessions
+  - policies
+  - replication
+
+rate_limit:
+  requests_per_second: 5

@@ -1,0 +1,289 @@
+suite: deployment
+release:
+  name: test-release
+  namespace: test-ns
+templates:
+  - deployment.yaml
+tests:
+  - it: should have correct name and replica count
+    set:
+      global:
+        platform: hmc
+    asserts:
+      - equal:
+          path: metadata.name
+          value: test-release-api-to-splunk-hmc
+      - exists:
+          path: metadata.labels["app.kubernetes.io/name"]
+      - equal:
+          path: metadata.labels["app.kubernetes.io/component"]
+          value: hmc
+      - equal:
+          path: spec.replicas
+          value: 1
+
+  - it: should set replicas from override
+    set:
+      global:
+        platform: hmc
+      replicaCount: 2
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 2
+
+  - it: should have poller container name and command
+    set:
+      global:
+        platform: hmc
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: poller
+      - equal:
+          path: spec.template.spec.containers[0].command[0]
+          value: python
+      - equal:
+          path: spec.template.spec.containers[0].command[2]
+          value: src.poller
+
+  - it: should have sender container name and command
+    set:
+      global:
+        platform: hmc
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: sender
+      - equal:
+          path: spec.template.spec.containers[1].command[0]
+          value: python
+      - equal:
+          path: spec.template.spec.containers[1].command[2]
+          value: src.sender
+
+  - it: should mount spool volume in both containers
+    set:
+      global:
+        platform: hmc
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].name
+          value: spool
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].mountPath
+          value: /spool
+      - equal:
+          path: spec.template.spec.containers[1].volumeMounts[0].name
+          value: spool
+      - equal:
+          path: spec.template.spec.containers[1].volumeMounts[0].mountPath
+          value: /spool
+
+  - it: should mount rules volume in poller container
+    set:
+      global:
+        platform: hmc
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[1].name
+          value: rules
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[1].mountPath
+          value: /rules
+
+  - it: should have securityContext
+    set:
+      global:
+        platform: hmc
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 1001
+
+  - it: should have liveness probe on poller
+    set:
+      global:
+        platform: hmc
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /healthz
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: 8080
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.initialDelaySeconds
+          value: 30
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.periodSeconds
+          value: 10
+
+  - it: should have readiness probe on poller
+    set:
+      global:
+        platform: hmc
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /readyz
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: 8080
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.initialDelaySeconds
+          value: 10
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.periodSeconds
+          value: 10
+
+  - it: should have liveness probe on sender
+    set:
+      global:
+        platform: hmc
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].livenessProbe.httpGet.path
+          value: /healthz
+      - equal:
+          path: spec.template.spec.containers[1].livenessProbe.httpGet.port
+          value: 8081
+      - equal:
+          path: spec.template.spec.containers[1].livenessProbe.initialDelaySeconds
+          value: 15
+      - equal:
+          path: spec.template.spec.containers[1].livenessProbe.periodSeconds
+          value: 10
+
+  - it: should have poller port 8080
+    set:
+      global:
+        platform: hmc
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 8080
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].name
+          value: health
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].protocol
+          value: TCP
+
+  - it: should have sender port 8081
+    set:
+      global:
+        platform: hmc
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].ports[0].containerPort
+          value: 8081
+      - equal:
+          path: spec.template.spec.containers[1].ports[0].name
+          value: health
+      - equal:
+          path: spec.template.spec.containers[1].ports[0].protocol
+          value: TCP
+
+  - it: should include vault secretRef when enabled
+    set:
+      global:
+        platform: hmc
+      vault:
+        enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].envFrom[1].secretRef.name
+          value: api-to-splunk-secrets
+
+  - it: should not include vault secretRef when disabled
+    set:
+      global:
+        platform: hmc
+      vault:
+        enabled: false
+    asserts:
+      - exists:
+          path: spec.template.spec.containers[0].envFrom[0]
+      - notExists:
+          path: spec.template.spec.containers[0].envFrom[1]
+
+  - it: should have spool PVC volume
+    set:
+      global:
+        platform: hmc
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[0].name
+          value: spool
+      - equal:
+          path: spec.template.spec.volumes[0].persistentVolumeClaim.claimName
+          value: test-release-api-to-splunk-hmc-spool
+
+  - it: should have rules configMap volume
+    set:
+      global:
+        platform: hmc
+      rulesConfigMap:
+        name: api-to-splunk-rules
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[1].name
+          value: rules
+      - equal:
+          path: spec.template.spec.volumes[1].configMap.name
+          value: api-to-splunk-rules
+
+  - it: should set productive resources for poller
+    set:
+      global:
+        platform: hmc
+      poller:
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+          value: 200m
+      - equal:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+          value: 1000m
+
+  - it: should set productive resources for sender
+    set:
+      global:
+        platform: hmc
+      sender:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[1].resources.requests.cpu
+          value: 50m
+      - equal:
+          path: spec.template.spec.containers[1].resources.limits.cpu
+          value: 200m
+
+  - it: should use serviceAccount from values
+    set:
+      global:
+        platform: hmc
+      serviceAccount:
+        name: api-to-splunk-sa
+    asserts:
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: api-to-splunk-sa

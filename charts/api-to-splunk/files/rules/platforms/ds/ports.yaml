@@ -1,0 +1,30 @@
+# DS8000 Platform - Ports Extraction Rules
+# Collects storage array port configuration, WWPN, and link state data.
+platform: ds
+sourcetype: "ds:port"
+index: "mainframe_metrics"
+
+extractions:
+  - field: "port_id"
+    json_path: "$.port_id"
+  - field: "array_id"
+    json_path: "$.array_id"
+  - field: "port_name"
+    json_path: "$.port_name"
+  - field: "wwpn"
+    json_path: "$.wwpn"
+  - field: "port_type"
+    json_path: "$.port_type"
+  - field: "speed_gbps"
+    json_path: "$.speed_gbps"
+  - field: "link_state"
+    json_path: "$.link_state"
+  - field: "topology"
+    json_path: "$.topology"
+
+thresholds:
+  - field: "link_state"
+    operator: "ne"
+    value: "online"
+    severity: "critical"
+    message_template: "Port {port_id} on array {array_id} is not online (state: {link_state})"

@@ -1,0 +1,20 @@
+[
+  {
+    "cpc_name": "CPCA",
+    "status": "operating",
+    "se_version": "2.16.0",
+    "hmc_version": "2.16.0",
+    "cpu_usage_pct": 45.2,
+    "memory_usage_pct": 62.3,
+    "energy_consumption_watts": "4200"
+  },
+  {
+    "cpc_name": "CPCB",
+    "status": "operating",
+    "se_version": "2.15.0",
+    "hmc_version": "2.15.0",
+    "cpu_usage_pct": 72.8,
+    "memory_usage_pct": 81.0,
+    "energy_consumption_watts": "5100"
+  }
+]

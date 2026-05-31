@@ -1,0 +1,23 @@
+platform: hmc
+sourcetype: "hmc:cpc_stats"
+index: "mainframe_metrics"
+
+extractions:
+  - field_name: "cpc_name"
+    json_path: "cpc_name"
+  - field_name: "status"
+    json_path: "status"
+  - field_name: "cpu_usage_pct"
+    json_path: "cpu_usage_pct"
+
+thresholds:
+  - field: "cpu_usage_pct"
+    operator: "gt"
+    value: 90
+    severity: "warning"
+    message_template: "CPC {cpc_name} CPU usage is {cpu_usage_pct}%"
+  - field: "status"
+    operator: "ne"
+    value: "operating"
+    severity: "critical"
+    message_template: "CPC {cpc_name} is not operating (status: {status})"

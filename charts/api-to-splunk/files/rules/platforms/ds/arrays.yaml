@@ -1,0 +1,44 @@
+# DS8000 Platform - Arrays Extraction Rules
+# Collects storage array configuration, capacity, and operational status data.
+platform: ds
+sourcetype: "ds:array"
+index: "mainframe_metrics"
+
+extractions:
+  - field: "array_id"
+    json_path: "$.array_id"
+  - field: "array_name"
+    json_path: "$.array_name"
+  - field: "model"
+    json_path: "$.model"
+  - field: "firmware_version"
+    json_path: "$.firmware_version"
+  - field: "status"
+    json_path: "$.status"
+  - field: "total_capacity_gb"
+    json_path: "$.total_capacity_gb"
+  - field: "used_capacity_gb"
+    json_path: "$.used_capacity_gb"
+  - field: "free_capacity_gb"
+    json_path: "$.free_capacity_gb"
+  - field: "rank_count"
+    json_path: "$.rank_count"
+  - field: "volume_count"
+    json_path: "$.volume_count"
+
+thresholds:
+  - field: "used_capacity_pct"
+    operator: "gt"
+    value: 90
+    severity: "warning"
+    message_template: "Storage array {array_name} used capacity is {used_capacity_pct}%"
+  - field: "used_capacity_pct"
+    operator: "gt"
+    value: 95
+    severity: "critical"
+    message_template: "Storage array {array_name} used capacity critical at {used_capacity_pct}%"
+  - field: "status"
+    operator: "ne"
+    value: "online"
+    severity: "critical"
+    message_template: "Storage array {array_name} is offline (status: {status})"
