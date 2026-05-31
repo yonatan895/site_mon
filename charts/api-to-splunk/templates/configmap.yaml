@@ -7,6 +7,7 @@ metadata:
 data:
   PLATFORM: {{ .Values.global.platform | quote }}
   POLL_INTERVAL_SECONDS: {{ .Values.config.pollIntervalSeconds | quote }}
+  POLL_MAX_WORKERS: {{ .Values.config.pollMaxWorkers | quote }}
   SPLUNK_HEC_URL: {{ .Values.config.hec.url | quote }}
   SPLUNK_HEC_BATCH_SIZE: {{ .Values.config.hec.batchSize | quote }}
   SPLUNK_HEC_BATCH_INTERVAL_MS: {{ .Values.config.hec.batchIntervalMs | quote }}

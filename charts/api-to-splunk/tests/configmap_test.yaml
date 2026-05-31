@@ -25,6 +25,15 @@ tests:
           path: data.POLL_INTERVAL_SECONDS
           value: "600"
 
+  - it: should set POLL_MAX_WORKERS from values
+    set:
+      config:
+        pollMaxWorkers: 10
+    asserts:
+      - equal:
+          path: data.POLL_MAX_WORKERS
+          value: "10"
+
   - it: should set SPLUNK_HEC_URL from values
     set:
       config:
