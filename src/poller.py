@@ -64,6 +64,7 @@ class Poller:
             policy=self.policy,
         )
         self.spool_manager = SpoolManager(spool_dir)
+        self.evaluator = Evaluator(platform_rules=self.platform_rules)
 
         logger.info(
             "poller_initialized",
@@ -198,11 +199,7 @@ class Poller:
                 logger.warning("no_site_config_for_evaluation", site=endpoint.site)
                 return None
 
-            evaluator = Evaluator(
-                platform_rules={data_type: platform_rule},
-                site_config=site_config,
-            )
-            result = evaluator.evaluate(data_type, raw_data, endpoint.name)
+            result = self.evaluator.evaluate(data_type, raw_data, endpoint.name, site_config)
             return result
         except Exception:
             logger.exception(

@@ -37,20 +37,20 @@ class Evaluator:
     def __init__(
         self,
         platform_rules: dict[str, PlatformRule],
-        site_config: SiteConfig,
+        site_config: SiteConfig | None = None,
     ) -> None:
         """Initialize the evaluator.
 
         Args:
             platform_rules: Dictionary of data_type -> PlatformRule.
-            site_config: Site configuration with platform and site metadata.
+            site_config: Optional site configuration. Can also be passed per evaluate() call.
         """
         self.platform_rules = platform_rules
         self.site_config = site_config
         logger.info(
             "evaluator_initialized",
             data_types=list(platform_rules.keys()),
-            site=site_config.site_name,
+            site=site_config.site_name if site_config else None,
         )
 
     def evaluate(
@@ -58,6 +58,7 @@ class Evaluator:
         data_type: str,
         raw_data: dict[str, Any] | list[dict[str, Any]],
         endpoint_name: str,
+        site_config: SiteConfig | None = None,
     ) -> PollingEvent | list[PollingEvent]:
         """Evaluate raw API response data against configured rules.
 
@@ -65,10 +66,16 @@ class Evaluator:
             data_type: The data type being processed (maps to a PlatformRule).
             raw_data: Raw API response, either a single dict or list of dicts.
             endpoint_name: Name of the source endpoint.
+            site_config: Site configuration. Uses self.site_config if not provided.
 
         Returns:
             A single PollingEvent or list of PollingEvent objects with alerts.
         """
+        sc = site_config or self.site_config
+        sc = site_config or self.site_config
+        if not sc:
+            raise ValueError("site_config is required for evaluation")
+
         rule = self.platform_rules.get(data_type)
         if rule is None:
             logger.warning("no_rule_for_data_type", data_type=data_type)
@@ -77,7 +84,7 @@ class Evaluator:
         if isinstance(raw_data, list):
             events: list[PollingEvent] = []
             for item in raw_data:
-                event = self._evaluate_item(data_type, item, rule, endpoint_name)
+                event = self._evaluate_item(data_type, item, rule, endpoint_name, sc)
                 if event is not None:
                     events.append(event)
             logger.debug(
@@ -87,7 +94,7 @@ class Evaluator:
             )
             return events
 
-        return self._evaluate_item(data_type, raw_data, rule, endpoint_name)
+        return self._evaluate_item(data_type, raw_data, rule, endpoint_name, sc)
 
     def _evaluate_item(
         self,
@@ -95,6 +102,7 @@ class Evaluator:
         raw_item: dict[str, Any],
         rule: PlatformRule,
         endpoint_name: str,
+        site_config: SiteConfig,
     ) -> PollingEvent:
         """Evaluate a single raw data item against the platform rule.
 
@@ -103,6 +111,7 @@ class Evaluator:
             raw_item: Single raw response item.
             rule: PlatformRule to apply.
             endpoint_name: Source endpoint name.
+            site_config: Site configuration for this evaluation.
 
         Returns:
             PollingEvent with extracted fields and any alerts.
@@ -111,8 +120,8 @@ class Evaluator:
 
         # Merge common fields (platform, site, timestamp, etc.)
         common = {
-            "platform": self.site_config.platform,
-            "site": self.site_config.site_name,
+            "platform": site_config.platform,
+            "site": site_config.site_name,
             "sourcetype": rule.sourcetype,
             "index": rule.index,
             "endpoint": endpoint_name,
@@ -130,8 +139,8 @@ class Evaluator:
         }
 
         event = PollingEvent(
-            platform=self.site_config.platform,
-            site=self.site_config.site_name,
+            platform=site_config.platform,
+            site=site_config.site_name,
             data_type=data_type,
             sourcetype=rule.sourcetype,
             index=rule.index,
