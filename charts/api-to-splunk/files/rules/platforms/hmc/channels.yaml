@@ -1,0 +1,24 @@
+# HMC Platform - Channels Extraction Rules
+# Collects channel path configuration and operational state data.
+platform: hmc
+sourcetype: "hmc:channel"
+index: "mainframe_metrics"
+
+extractions:
+  - field: "channel_id"
+    json_path: "$.channel_id"
+  - field: "cpc_name"
+    json_path: "$.cpc_name"
+  - field: "chpid_id"
+    json_path: "$.chpid_id"
+  - field: "channel_type"
+    json_path: "$.channel_type"
+  - field: "channel_state"
+    json_path: "$.channel_state"
+
+thresholds:
+  - field: "channel_state"
+    operator: "ne"
+    value: "operational"
+    severity: "warning"
+    message_template: "Channel {channel_id} on CPC {cpc_name} is not operational (state: {channel_state})"

@@ -1,0 +1,35 @@
+# TS7700 Platform - Cluster Extraction Rules
+# Collects TS7700 grid cluster configuration, node count, and operational status data.
+platform: ts7700
+sourcetype: "ts7700:cluster"
+index: "mainframe_metrics"
+
+extractions:
+  - field: "cluster_id"
+    json_path: "$.cluster_id"
+  - field: "cluster_name"
+    json_path: "$.cluster_name"
+  - field: "composite_library_name"
+    json_path: "$.composite_library_name"
+  - field: "status"
+    json_path: "$.status"
+  - field: "num_nodes"
+    json_path: "$.num_nodes"
+  - field: "grid_status"
+    json_path: "$.grid_status"
+  - field: "tape_volume_cache_status"
+    json_path: "$.tape_volume_cache_status"
+  - field: "virtual_device_count"
+    json_path: "$.virtual_device_count"
+
+thresholds:
+  - field: "status"
+    operator: "ne"
+    value: "operational"
+    severity: "critical"
+    message_template: "TS7700 cluster {cluster_name} is not operational (status: {status})"
+  - field: "grid_status"
+    operator: "ne"
+    value: "online"
+    severity: "critical"
+    message_template: "TS7700 cluster {cluster_name} grid is offline (grid_status: {grid_status})"

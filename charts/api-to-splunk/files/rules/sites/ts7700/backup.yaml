@@ -1,0 +1,18 @@
+# TS7700 Site - Backup
+# Backup TS7700 endpoint for reduced data type collection (cluster only).
+site_name: ts7700-backup
+platform: ts7700
+is_primary: false
+
+endpoints:
+  - name: ts7700-backup
+    url: "https://ts7700-backup.example.com"
+    platform: ts7700
+    site: backup
+    auth_type: basic
+    creds_vault_path: "secret/mainframe/ts7700/backup"
+    rate_limit_rps: 5
+    timeout: 30
+
+data_types:
+  - cluster

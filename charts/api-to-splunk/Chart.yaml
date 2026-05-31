@@ -1,0 +1,6 @@
+apiVersion: v2
+name: api-to-splunk
+description: Polls mainframe infrastructure APIs and sends metrics to Splunk HEC
+type: application
+version: 1.0.0
+appVersion: "1.0.0"

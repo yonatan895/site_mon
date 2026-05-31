@@ -1,0 +1,23 @@
+# HMC Site - Primary
+# Primary HMC endpoint for full data type collection.
+site_name: hmc-primary
+platform: hmc
+is_primary: true
+
+endpoints:
+  - name: hmc-primary
+    url: "https://hmc-primary.example.com"
+    platform: hmc
+    site: primary
+    auth_type: basic
+    creds_vault_path: "secret/mainframe/hmc/primary"
+    rate_limit_rps: 5
+    timeout: 30
+
+data_types:
+  - chpid
+  - lpars
+  - cpus
+  - networking
+  - channels
+  - cpc-stats

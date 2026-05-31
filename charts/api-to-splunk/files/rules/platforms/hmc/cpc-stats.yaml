@@ -1,0 +1,38 @@
+# HMC Platform - CPC Statistics Extraction Rules
+# Collects CPC-level operational status, version info, and resource utilization metrics.
+platform: hmc
+sourcetype: "hmc:cpc_stats"
+index: "mainframe_metrics"
+
+extractions:
+  - field: "cpc_name"
+    json_path: "$.cpc_name"
+  - field: "status"
+    json_path: "$.status"
+  - field: "se_version"
+    json_path: "$.se_version"
+  - field: "hmc_version"
+    json_path: "$.hmc_version"
+  - field: "cpu_usage_pct"
+    json_path: "$.cpu_usage_pct"
+  - field: "memory_usage_pct"
+    json_path: "$.memory_usage_pct"
+  - field: "energy_consumption_watts"
+    json_path: "$.energy_consumption_watts"
+
+thresholds:
+  - field: "cpu_usage_pct"
+    operator: "gt"
+    value: 90
+    severity: "warning"
+    message_template: "CPC {cpc_name} CPU usage is {cpu_usage_pct}%"
+  - field: "memory_usage_pct"
+    operator: "gt"
+    value: 90
+    severity: "warning"
+    message_template: "CPC {cpc_name} memory usage is {memory_usage_pct}%"
+  - field: "status"
+    operator: "ne"
+    value: "operating"
+    severity: "critical"
+    message_template: "CPC {cpc_name} is not operating (status: {status})"

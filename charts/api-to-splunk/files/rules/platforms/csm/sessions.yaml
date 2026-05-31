@@ -1,0 +1,37 @@
+# CSM Platform - Sessions Extraction Rules
+# Collects Copy Services Manager session configuration, state, and RPO metrics.
+platform: csm
+sourcetype: "csm:session"
+index: "mainframe_metrics"
+
+extractions:
+  - field: "session_id"
+    json_path: "$.session_id"
+  - field: "session_name"
+    json_path: "$.session_name"
+  - field: "session_type"
+    json_path: "$.session_type"
+  - field: "source_site"
+    json_path: "$.source_site"
+  - field: "target_site"
+    json_path: "$.target_site"
+  - field: "session_state"
+    json_path: "$.session_state"
+  - field: "role_pair_state"
+    json_path: "$.role_pair_state"
+  - field: "copy_type"
+    json_path: "$.copy_type"
+  - field: "rpo_seconds"
+    json_path: "$.rpo_seconds"
+
+thresholds:
+  - field: "session_state"
+    operator: "ne"
+    value: "replicated"
+    severity: "warning"
+    message_template: "CSM session {session_name} state is {session_state}"
+  - field: "rpo_seconds"
+    operator: "gt"
+    value: 300
+    severity: "warning"
+    message_template: "CSM session {session_name} RPO is {rpo_seconds}s"

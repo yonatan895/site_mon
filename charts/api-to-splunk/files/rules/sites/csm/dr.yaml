@@ -1,0 +1,20 @@
+# CSM Site - DR
+# Disaster recovery CSM endpoint for full data type collection (dual-active mode).
+site_name: csm-dr
+platform: csm
+is_primary: false
+
+endpoints:
+  - name: csm-dr
+    url: "https://csm-dr.example.com"
+    platform: csm
+    site: dr
+    auth_type: basic
+    creds_vault_path: "secret/mainframe/csm/dr"
+    rate_limit_rps: 5
+    timeout: 30
+
+data_types:
+  - sessions
+  - policies
+  - replication

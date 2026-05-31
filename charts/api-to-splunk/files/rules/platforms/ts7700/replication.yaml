@@ -1,0 +1,28 @@
+# TS7700 Platform - Replication Extraction Rules
+# Collects grid-to-grid replication state, queue depth, and bandwidth metrics.
+platform: ts7700
+sourcetype: "ts7700:replication"
+index: "mainframe_metrics"
+
+extractions:
+  - field: "grid_id"
+    json_path: "$.grid_id"
+  - field: "source_cluster"
+    json_path: "$.source_cluster"
+  - field: "target_cluster"
+    json_path: "$.target_cluster"
+  - field: "replication_state"
+    json_path: "$.replication_state"
+  - field: "logical_volume_status"
+    json_path: "$.logical_volume_status"
+  - field: "replication_queue_depth"
+    json_path: "$.replication_queue_depth"
+  - field: "bandwidth_mbps"
+    json_path: "$.bandwidth_mbps"
+
+thresholds:
+  - field: "replication_state"
+    operator: "ne"
+    value: "operational"
+    severity: "critical"
+    message_template: "TS7700 replication from {source_cluster} to {target_cluster} is not operational (state: {replication_state})"

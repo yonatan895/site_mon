@@ -1,0 +1,26 @@
+# CSM Platform - Policies Extraction Rules
+# Collects Copy Services Manager policy configuration and failover state data.
+platform: csm
+sourcetype: "csm:policy"
+index: "mainframe_metrics"
+
+extractions:
+  - field: "policy_id"
+    json_path: "$.policy_id"
+  - field: "policy_name"
+    json_path: "$.policy_name"
+  - field: "policy_type"
+    json_path: "$.policy_type"
+  - field: "session_ids"
+    json_path: "$.session_ids"
+  - field: "replication_direction"
+    json_path: "$.replication_direction"
+  - field: "failover_state"
+    json_path: "$.failover_state"
+
+thresholds:
+  - field: "failover_state"
+    operator: "ne"
+    value: "operational"
+    severity: "critical"
+    message_template: "CSM policy {policy_name} failover state is {failover_state}"

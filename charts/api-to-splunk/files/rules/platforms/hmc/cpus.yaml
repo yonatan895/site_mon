@@ -1,0 +1,24 @@
+# HMC Platform - CPU Extraction Rules
+# Collects processor configuration and specialty engine counts.
+# Informational only - no critical alerting thresholds defined.
+platform: hmc
+sourcetype: "hmc:cpu"
+index: "mainframe_metrics"
+
+extractions:
+  - field: "cpc_name"
+    json_path: "$.cpc_name"
+  - field: "cpu_type"
+    json_path: "$.cpu_type"
+  - field: "cpu_count"
+    json_path: "$.cpu_count"
+  - field: "ifl_count"
+    json_path: "$.ifl_count"
+  - field: "zIIP_count"
+    json_path: "$.zIIP_count"
+  - field: "icf_count"
+    json_path: "$.icf_count"
+  - field: "shared_cpu_pool"
+    json_path: "$.shared_cpu_pool"
+
+thresholds: []

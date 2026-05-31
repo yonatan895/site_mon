@@ -1,0 +1,26 @@
+# TS7700 Platform - Drives Extraction Rules
+# Collects virtual tape drive configuration, state, and encryption status data.
+platform: ts7700
+sourcetype: "ts7700:drive"
+index: "mainframe_metrics"
+
+extractions:
+  - field: "drive_id"
+    json_path: "$.drive_id"
+  - field: "cluster_id"
+    json_path: "$.cluster_id"
+  - field: "drive_type"
+    json_path: "$.drive_type"
+  - field: "drive_state"
+    json_path: "$.drive_state"
+  - field: "mount_count"
+    json_path: "$.mount_count"
+  - field: "encryption_status"
+    json_path: "$.encryption_status"
+
+thresholds:
+  - field: "drive_state"
+    operator: "ne"
+    value: "available"
+    severity: "warning"
+    message_template: "TS7700 drive {drive_id} is in state {drive_state}"
