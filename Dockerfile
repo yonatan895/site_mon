@@ -12,6 +12,7 @@ RUN if [ "$INSTALL_DEV" = "true" ]; then \
 
 COPY src/ ./src/
 
+USER root
 RUN mkdir -p /spool /rules && chown -R 1001:0 /spool /rules /app
 
 USER 1001
