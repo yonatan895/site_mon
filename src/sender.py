@@ -4,6 +4,7 @@ import os
 import signal
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 import uvicorn
@@ -16,6 +17,7 @@ logger = setup_logging(__name__)
 
 DEFAULT_WATCH_INTERVAL = 1.0
 DEFAULT_BATCH_FILES = 50
+DEFAULT_MAX_WORKERS = 5
 
 
 class Sender:
@@ -56,7 +58,7 @@ class Sender:
     def run_once(self) -> int:
         """Execute a single send cycle.
 
-        Reads pending NDJSON files, sends content directly to HEC,
+        Reads pending NDJSON files, sends them to HEC in parallel batches,
         and acknowledges or retries each file.
 
         Returns:
@@ -69,17 +71,23 @@ class Sender:
         logger.info("sender_cycle_start", files=len(entries))
 
         success_count = 0
-        for entry in entries:
-            try:
-                ok = self.hec_client.send_ndjson(entry.content)
-                if ok:
-                    self.spool_manager.ack_file(entry.filename)
-                    success_count += 1
-                else:
-                    self.spool_manager.nack_file(entry.filename, error="hec_send_returned_false")
-            except Exception:
-                logger.exception("send_failed", filename=entry.filename)
-                self.spool_manager.nack_file(entry.filename, error="hec_send_exception")
+        max_workers = int(os.environ.get("SENDER_MAX_WORKERS", str(DEFAULT_MAX_WORKERS)))
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {}
+            for entry in entries:
+                future = executor.submit(self._send_and_ack, entry)
+                futures[future] = entry
+
+            for future in as_completed(futures):
+                entry = futures[future]
+                try:
+                    ok = future.result()
+                    if ok:
+                        success_count += 1
+                except Exception:
+                    logger.exception("send_failed", filename=entry.filename)
+                    self.spool_manager.nack_file(entry.filename, error="send_exception")
 
         failure_count = len(entries) - success_count
         logger.info(
@@ -88,6 +96,28 @@ class Sender:
             failure=failure_count,
         )
         return success_count
+
+    def _send_and_ack(self, entry: Any) -> bool:
+        """Send a single spool entry to HEC and ack/nack accordingly.
+
+        Args:
+            entry: SpoolEntry to deliver.
+
+        Returns:
+            True if delivery was successful.
+        """
+        try:
+            ok = self.hec_client.send_ndjson(entry.content)
+            if ok:
+                self.spool_manager.ack_file(entry.filename)
+                return True
+            else:
+                self.spool_manager.nack_file(entry.filename, error="hec_send_returned_false")
+                return False
+        except Exception:
+            logger.exception("send_failed", filename=entry.filename)
+            self.spool_manager.nack_file(entry.filename, error="send_exception")
+        return False
 
     def cleanup(self) -> int:
         return self.spool_manager.cleanup_old_files(max_age_hours=24)
