@@ -138,19 +138,69 @@ class TestSpoolManagerNack:
 
 class TestSpoolManagerCleanup:
     def test_removes_old_files(self, spool_manager: SpoolManager) -> None:
+        tmp_path = spool_manager.spool_dir / "old.tmp"
+        tmp_path.write_text("stale")
+        old_time = time.time() - (48 * 3600)
+        os.utime(str(tmp_path), (old_time, old_time))
+        removed = spool_manager.cleanup_old_files(max_age_hours=24)
+        assert removed == 1
+        assert not tmp_path.exists()
+
+    def test_keeps_recent_files(self, spool_manager: SpoolManager) -> None:
+        tmp_path = spool_manager.spool_dir / "recent.tmp"
+        tmp_path.write_text("recent")
+        removed = spool_manager.cleanup_old_files(max_age_hours=24)
+        assert removed == 0
+        assert tmp_path.exists()
+
+    def test_cleanup_preserves_ndjson(self, spool_manager: SpoolManager) -> None:
         spool_manager.write_ndjson('{"a": 1}\n', batch_id="b1")
         filepath = spool_manager.spool_dir / spool_manager.list_pending()[0]
         old_time = time.time() - (48 * 3600)
         os.utime(str(filepath), (old_time, old_time))
         removed = spool_manager.cleanup_old_files(max_age_hours=24)
-        assert removed == 1
-        assert len(spool_manager.list_pending()) == 0
+        assert removed == 0
+        assert filepath.exists()
 
-    def test_keeps_recent_files(self, spool_manager: SpoolManager) -> None:
+    def test_cleanup_preserves_processing(self, spool_manager: SpoolManager) -> None:
         spool_manager.write_ndjson('{"a": 1}\n', batch_id="b1")
+        spool_manager.read_ndjson_batch(max_files=10)
+        for entry in spool_manager.spool_dir.iterdir():
+            if entry.suffix == PROCESSING_EXTENSION:
+                old_time = time.time() - (48 * 3600)
+                os.utime(str(entry), (old_time, old_time))
+                break
         removed = spool_manager.cleanup_old_files(max_age_hours=24)
         assert removed == 0
-        assert len(spool_manager.list_pending()) == 1
+
+
+class TestReclaimStaleProcessing:
+    def test_reclaims_stale_processing(self, tmp_path: Path) -> None:
+        d = str(tmp_path)
+        mgr = SpoolManager(spool_dir=d, max_spool_size_mb=10)
+        mgr.write_ndjson('{"a": 1}\n', batch_id="b1")
+        mgr.read_ndjson_batch(max_files=10)
+        assert mgr.list_pending() == []
+
+        for entry in Path(d).iterdir():
+            if entry.suffix == PROCESSING_EXTENSION:
+                old_time = time.time() - (20 * 60)
+                os.utime(str(entry), (old_time, old_time))
+                break
+
+        reclaimed = mgr.reclaim_stale_processing(stale_minutes=10)
+        assert reclaimed == 1
+        assert len(mgr.list_pending()) == 1
+
+    def test_leaves_recent_processing_alone(self, tmp_path: Path) -> None:
+        d = str(tmp_path)
+        mgr = SpoolManager(spool_dir=d, max_spool_size_mb=10)
+        mgr.write_ndjson('{"a": 1}\n', batch_id="b1")
+        mgr.read_ndjson_batch(max_files=10)
+
+        reclaimed = mgr.reclaim_stale_processing(stale_minutes=10)
+        assert reclaimed == 0
+        assert mgr.list_pending() == []
 
 
 class TestSpoolStats:
