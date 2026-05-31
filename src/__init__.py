@@ -1,5 +1,7 @@
 """Mainframe infrastructure monitoring pipeline."""
 
+__version__ = "1.1.0"
+
 from .models import (
     FieldExtraction,
     HealthStatus,
@@ -7,7 +9,6 @@ from .models import (
     PollingEvent,
     SiteConfig,
     SourceEndpoint,
-    SpoolRecord,
     ThresholdRule,
 )
 from .utils import (
@@ -23,7 +24,6 @@ from .utils import (
 
 __all__ = [
     # Models
-    "SpoolRecord",
     "SourceEndpoint",
     "HealthStatus",
     "FieldExtraction",

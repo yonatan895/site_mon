@@ -126,16 +126,6 @@ def calculate_backoff(attempt: int, base: float = 1, max_wait: float = 64) -> fl
     return result
 
 
-_utils_logger = None
-
-
-def _get_utils_logger() -> structlog.BoundLogger:
-    global _utils_logger
-    if _utils_logger is None:
-        _utils_logger = setup_logging("src.utils")
-    return _utils_logger
-
-
 def retry_with_backoff(
     max_attempts: int = 5,
     base_delay: float = 1.0,

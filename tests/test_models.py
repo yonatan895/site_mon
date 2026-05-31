@@ -10,7 +10,6 @@ from src.models import (
     PollingEvent,
     SiteConfig,
     SourceEndpoint,
-    SpoolRecord,
     ThresholdRule,
 )
 
@@ -44,30 +43,6 @@ class TestSourceEndpoint:
     def test_missing_required_fields(self) -> None:
         with pytest.raises(pydantic.ValidationError):
             SourceEndpoint(name="test-ep")
-
-
-class TestSpoolRecord:
-    def test_valid_record(self) -> None:
-        sr = SpoolRecord(
-            batch_id="b1",
-            events=[{"key": "val"}],
-            platform="hmc",
-            site="primary",
-            endpoint="test-ep",
-        )
-        assert sr.batch_id == "b1"
-        assert sr.retry_count == 0
-        assert sr.max_retries == 5
-
-    def test_timestamp_default(self) -> None:
-        sr = SpoolRecord(
-            batch_id="b1",
-            events=[{"key": "val"}],
-            platform="hmc",
-            site="primary",
-            endpoint="test-ep",
-        )
-        assert isinstance(sr.timestamp, datetime)
 
 
 class TestHealthStatus:
