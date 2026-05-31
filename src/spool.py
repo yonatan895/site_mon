@@ -73,6 +73,7 @@ class SpoolManager:
         ensure_dir(str(self.spool_dir))
         ensure_dir(str(self.dead_letter_dir))
         self._lock = threading.Lock()
+        self.reclaim_stale_processing()
 
         logger.info(
             "spool_manager_initialized",
@@ -112,7 +113,10 @@ class SpoolManager:
         tmp_path = filepath.with_suffix(filepath.suffix + TEMP_EXTENSION)
 
         try:
-            tmp_path.write_text(content, encoding="utf-8")
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())
             os.rename(str(tmp_path), str(filepath))
         except Exception:
             if tmp_path.exists():
@@ -240,12 +244,45 @@ class SpoolManager:
         os.rename(str(src), str(dst))
         logger.info("moved_to_dead_letter", filename=src.name)
 
+    def reclaim_stale_processing(self, stale_minutes: int = 10) -> int:
+        """Reclaim stranded .processing files back to .ndjson pending state.
+
+        A .processing file untouched for > stale_minutes indicates the sender
+        crashed mid-send. Renaming back to .ndjson makes the batch retryable.
+
+        Returns:
+            Number of files reclaimed.
+        """
+        cutoff = time.time() - (stale_minutes * 60)
+        reclaimed = 0
+        for entry in self.spool_dir.glob(f"*{PROCESSING_EXTENSION}"):
+            if not entry.is_file():
+                continue
+            try:
+                if entry.stat().st_mtime >= cutoff:
+                    continue
+                new_path = entry.with_suffix(NDJSON_EXTENSION)
+                if new_path.exists():
+                    new_path.unlink()
+                os.rename(str(entry), str(new_path))
+                reclaimed += 1
+            except (FileNotFoundError, OSError):
+                pass
+        if reclaimed:
+            logger.info("stale_processing_reclaimed", count=reclaimed)
+        return reclaimed
+
     def cleanup_old_files(self, max_age_hours: int = 24) -> int:
-        """Remove files older than max_age_hours from spool."""
+        """Remove files older than max_age_hours from spool.
+
+        Never removes .ndjson (un-sent) or .processing (in-flight) files.
+        """
         cutoff = time.time() - (max_age_hours * 3600)
         removed = 0
         for entry in self.spool_dir.iterdir():
             if not entry.is_file():
+                continue
+            if entry.suffix in (NDJSON_EXTENSION, PROCESSING_EXTENSION):
                 continue
             try:
                 if entry.stat().st_mtime < cutoff:

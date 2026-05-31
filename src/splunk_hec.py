@@ -5,8 +5,8 @@ understands newline-delimited JSON, so no transformation is needed.
 """
 
 import gzip
-import json
 import logging
+import uuid
 from urllib.parse import urljoin
 
 import urllib3
@@ -23,7 +23,6 @@ from .utils import setup_logging
 logger = setup_logging(__name__)
 
 HEC_EVENT_PATH = "/services/collector/event"
-HEC_ACK_PATH = "/services/collector/ack"
 
 RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
 
@@ -76,29 +75,8 @@ class SplunkHECClient:
         )
 
     def _create_ack_channel(self) -> None:
-        url = urljoin(self.hec_url + "/", HEC_ACK_PATH.lstrip("/"))
-        headers = {"Authorization": f"Splunk {self.hec_token}"}
-        try:
-            response = self.pool.request(
-                "POST",
-                url,
-                headers=headers,
-                timeout=urllib3.Timeout(total=self.timeout),
-            )
-            if response.status == 201:
-                data = json.loads(response.data.decode("utf-8"))
-                self.channel_id = str(data.get("ackId", ""))
-                logger.info("ack_channel_created", channel_id=self.channel_id)
-            else:
-                logger.warning(
-                    "ack_channel_creation_failed",
-                    status=response.status,
-                    body=response.data[:500],
-                )
-                self.ack_enabled = False
-        except Exception as e:
-            logger.error("ack_channel_error", error=str(e))
-            self.ack_enabled = False
+        self.channel_id = str(uuid.uuid4())
+        logger.info("ack_channel_created", channel_id=self.channel_id)
 
     def send_ndjson(self, ndjson_content: str) -> bool:
         """Send a raw NDJSON string to Splunk HEC.
@@ -159,7 +137,7 @@ class SplunkHECClient:
             logger.debug("hec_post_success", payload_size=len(payload))
             return
 
-        if response.status in (429, 503):
+        if response.status in RETRYABLE_STATUSES:
             retry_after = response.headers.get("Retry-After", "5")
             logger.warning(
                 "hec_retryable_error",

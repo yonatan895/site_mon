@@ -19,15 +19,15 @@ def _make_response(status: int = 200, data: object = b"", headers: dict | None =
 
 
 class TestSplunkHECInit:
-    def test_initialization(self) -> None:
-        with patch("urllib3.PoolManager.request") as mock_req:
-            mock_req.return_value = _make_response(201, {"ackId": "12345"})
-            client = SplunkHECClient(
-                hec_url="https://splunk.example.com:8088",
-                hec_token="test-token",
-            )
-            assert client.channel_id == "12345"
-            client.close()
+    def test_initialization_generates_uuid_channel(self) -> None:
+        client = SplunkHECClient(
+            hec_url="https://splunk.example.com:8088",
+            hec_token="test-token",
+        )
+        assert client.channel_id is not None
+        assert len(client.channel_id) == 36
+        assert client.channel_id.count("-") == 4
+        client.close()
 
     def test_ack_disabled(self) -> None:
         client = SplunkHECClient(
@@ -37,16 +37,6 @@ class TestSplunkHECInit:
         )
         assert client.channel_id is None
         client.close()
-
-    def test_ack_creation_failure_falls_back(self) -> None:
-        with patch("urllib3.PoolManager.request") as mock_req:
-            mock_req.return_value = _make_response(500, b"error")
-            client = SplunkHECClient(
-                hec_url="https://splunk.example.com:8088",
-                hec_token="test-token",
-            )
-            assert client.ack_enabled is False
-            client.close()
 
 
 class TestSendNDJSON:
@@ -97,19 +87,17 @@ class TestSendNDJSON:
 
     def test_channel_header_when_ack_enabled(self) -> None:
         with patch("urllib3.PoolManager.request") as mock_req:
-            mock_req.side_effect = [
-                _make_response(201, {"ackId": "ch-99"}),
-                _make_response(200),
-            ]
+            mock_req.return_value = _make_response(200)
             c = SplunkHECClient(
                 hec_url="https://splunk.example.com:8088",
                 hec_token="test-token",
                 ack_enabled=True,
             )
             c.send_ndjson('{"event": "test"}\n')
-            assert mock_req.call_count >= 2
+            assert mock_req.call_count >= 1
             headers = mock_req.call_args[1].get("headers", {})
-            assert headers.get("X-Splunk-Request-Channel") == "ch-99"
+            assert "X-Splunk-Request-Channel" in headers
+            assert headers["X-Splunk-Request-Channel"] == c.channel_id
             c.close()
 
 
@@ -146,6 +134,54 @@ class TestRetryBehavior:
             assert mock_req.call_count >= 2
             c.close()
 
+    def test_retry_on_500(self) -> None:
+        with patch("urllib3.PoolManager.request") as mock_req:
+            mock_req.side_effect = [
+                _make_response(500),
+                _make_response(200),
+            ]
+            c = SplunkHECClient(
+                hec_url="https://splunk.example.com:8088",
+                hec_token="test-token",
+                ack_enabled=False,
+            )
+            result = c.send_ndjson('{"event": "test"}\n')
+            assert result is True
+            assert mock_req.call_count >= 2
+            c.close()
+
+    def test_retry_on_502(self) -> None:
+        with patch("urllib3.PoolManager.request") as mock_req:
+            mock_req.side_effect = [
+                _make_response(502),
+                _make_response(200),
+            ]
+            c = SplunkHECClient(
+                hec_url="https://splunk.example.com:8088",
+                hec_token="test-token",
+                ack_enabled=False,
+            )
+            result = c.send_ndjson('{"event": "test"}\n')
+            assert result is True
+            assert mock_req.call_count >= 2
+            c.close()
+
+    def test_retry_on_504(self) -> None:
+        with patch("urllib3.PoolManager.request") as mock_req:
+            mock_req.side_effect = [
+                _make_response(504),
+                _make_response(200),
+            ]
+            c = SplunkHECClient(
+                hec_url="https://splunk.example.com:8088",
+                hec_token="test-token",
+                ack_enabled=False,
+            )
+            result = c.send_ndjson('{"event": "test"}\n')
+            assert result is True
+            assert mock_req.call_count >= 2
+            c.close()
+
     def test_no_retry_on_400(self) -> None:
         with patch("urllib3.PoolManager.request") as mock_req:
             mock_req.return_value = _make_response(400)
@@ -162,12 +198,10 @@ class TestRetryBehavior:
 
 class TestClose:
     def test_close_clears_pool(self) -> None:
-        with patch("urllib3.PoolManager.request") as mock_req:
-            mock_req.return_value = _make_response(201, {"ackId": "12345"})
-            client = SplunkHECClient(
-                hec_url="https://splunk.example.com:8088",
-                hec_token="test-token",
-                ack_enabled=False,
-            )
-            client.close()
-            assert client.pool is not None
+        client = SplunkHECClient(
+            hec_url="https://splunk.example.com:8088",
+            hec_token="test-token",
+            ack_enabled=False,
+        )
+        client.close()
+        assert client.pool is not None
