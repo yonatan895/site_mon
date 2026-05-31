@@ -2,13 +2,13 @@ suite: service
 release:
   name: test-release
   namespace: test-ns
+set:
+  global:
+    platform: hmc
 templates:
   - service.yaml
 tests:
   - it: should be a ClusterIP service
-    set:
-      global:
-        platform: hmc
     asserts:
       - equal:
           path: spec.type
@@ -16,8 +16,6 @@ tests:
 
   - it: should have poller-health port from values
     set:
-      global:
-        platform: hmc
       service:
         port: 8080
         targetPort: 8080
@@ -31,9 +29,6 @@ tests:
             protocol: TCP
 
   - it: should have sender-health port fixed at 8081
-    set:
-      global:
-        platform: hmc
     asserts:
       - contains:
           path: spec.ports
@@ -44,18 +39,12 @@ tests:
             protocol: TCP
 
   - it: should have name from fullname helper
-    set:
-      global:
-        platform: hmc
     asserts:
       - equal:
           path: metadata.name
           value: test-release-api-to-splunk-hmc
 
   - it: should have selector labels
-    set:
-      global:
-        platform: hmc
     asserts:
       - exists:
           path: spec.selector["app.kubernetes.io/name"]

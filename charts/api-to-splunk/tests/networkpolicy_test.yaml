@@ -2,13 +2,14 @@ suite: networkpolicy
 release:
   name: test-release
   namespace: test-ns
+set:
+  global:
+    platform: hmc
 templates:
   - networkpolicy.yaml
 tests:
   - it: should create NetworkPolicy when enabled
     set:
-      global:
-        platform: hmc
       networkPolicy:
         enabled: true
         splunkHecEndpoint: "splunk-hec.example.com"
@@ -23,8 +24,6 @@ tests:
 
   - it: should not create NetworkPolicy when disabled
     set:
-      global:
-        platform: hmc
       networkPolicy:
         enabled: false
     asserts:
@@ -33,8 +32,6 @@ tests:
 
   - it: should allow DNS egress
     set:
-      global:
-        platform: hmc
       networkPolicy:
         enabled: true
         splunkHecEndpoint: "splunk-hec.example.com"
@@ -52,8 +49,6 @@ tests:
 
   - it: should include Splunk HEC egress rule when endpoint set
     set:
-      global:
-        platform: hmc
       networkPolicy:
         enabled: true
         splunkHecEndpoint: "splunk-hec.example.com"
@@ -73,8 +68,6 @@ tests:
 
   - it: should include API endpoint egress rules
     set:
-      global:
-        platform: hmc
       networkPolicy:
         enabled: true
         splunkHecEndpoint: "splunk-hec.example.com"
@@ -94,8 +87,6 @@ tests:
 
   - it: should have policyTypes ingress and egress
     set:
-      global:
-        platform: hmc
       networkPolicy:
         enabled: true
         splunkHecEndpoint: "splunk-hec.example.com"

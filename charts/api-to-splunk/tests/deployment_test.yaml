@@ -2,13 +2,13 @@ suite: deployment
 release:
   name: test-release
   namespace: test-ns
+set:
+  global:
+    platform: hmc
 templates:
   - deployment.yaml
 tests:
   - it: should have correct name and replica count
-    set:
-      global:
-        platform: hmc
     asserts:
       - equal:
           path: metadata.name
@@ -24,8 +24,6 @@ tests:
 
   - it: should set replicas from override
     set:
-      global:
-        platform: hmc
       replicaCount: 2
     asserts:
       - equal:
@@ -33,9 +31,6 @@ tests:
           value: 2
 
   - it: should have poller container name and command
-    set:
-      global:
-        platform: hmc
     asserts:
       - equal:
           path: spec.template.spec.containers[0].name
@@ -48,9 +43,6 @@ tests:
           value: src.poller
 
   - it: should have sender container name and command
-    set:
-      global:
-        platform: hmc
     asserts:
       - equal:
           path: spec.template.spec.containers[1].name
@@ -63,9 +55,6 @@ tests:
           value: src.sender
 
   - it: should mount spool volume in both containers
-    set:
-      global:
-        platform: hmc
     asserts:
       - equal:
           path: spec.template.spec.containers[0].volumeMounts[0].name
@@ -81,9 +70,6 @@ tests:
           value: /spool
 
   - it: should mount rules volume in poller container
-    set:
-      global:
-        platform: hmc
     asserts:
       - equal:
           path: spec.template.spec.containers[0].volumeMounts[1].name
@@ -93,9 +79,6 @@ tests:
           value: /rules
 
   - it: should have securityContext
-    set:
-      global:
-        platform: hmc
     asserts:
       - equal:
           path: spec.template.spec.securityContext.runAsNonRoot
@@ -105,9 +88,6 @@ tests:
           value: 1001
 
   - it: should have liveness probe on poller
-    set:
-      global:
-        platform: hmc
     asserts:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe.httpGet.path
@@ -123,9 +103,6 @@ tests:
           value: 10
 
   - it: should have readiness probe on poller
-    set:
-      global:
-        platform: hmc
     asserts:
       - equal:
           path: spec.template.spec.containers[0].readinessProbe.httpGet.path
@@ -141,9 +118,6 @@ tests:
           value: 10
 
   - it: should have liveness probe on sender
-    set:
-      global:
-        platform: hmc
     asserts:
       - equal:
           path: spec.template.spec.containers[1].livenessProbe.httpGet.path
@@ -159,9 +133,6 @@ tests:
           value: 10
 
   - it: should have poller port 8080
-    set:
-      global:
-        platform: hmc
     asserts:
       - equal:
           path: spec.template.spec.containers[0].ports[0].containerPort
@@ -174,9 +145,6 @@ tests:
           value: TCP
 
   - it: should have sender port 8081
-    set:
-      global:
-        platform: hmc
     asserts:
       - equal:
           path: spec.template.spec.containers[1].ports[0].containerPort
@@ -190,8 +158,6 @@ tests:
 
   - it: should include vault secretRef when enabled
     set:
-      global:
-        platform: hmc
       vault:
         enabled: true
     asserts:
@@ -201,8 +167,6 @@ tests:
 
   - it: should not include vault secretRef when disabled
     set:
-      global:
-        platform: hmc
       vault:
         enabled: false
     asserts:
@@ -212,9 +176,6 @@ tests:
           path: spec.template.spec.containers[0].envFrom[1]
 
   - it: should have spool PVC volume
-    set:
-      global:
-        platform: hmc
     asserts:
       - equal:
           path: spec.template.spec.volumes[0].name
@@ -225,8 +186,6 @@ tests:
 
   - it: should have rules configMap volume
     set:
-      global:
-        platform: hmc
       rulesConfigMap:
         name: api-to-splunk-rules
     asserts:
@@ -239,8 +198,6 @@ tests:
 
   - it: should set productive resources for poller
     set:
-      global:
-        platform: hmc
       poller:
         resources:
           requests:
@@ -259,8 +216,6 @@ tests:
 
   - it: should set productive resources for sender
     set:
-      global:
-        platform: hmc
       sender:
         resources:
           requests:
@@ -279,8 +234,6 @@ tests:
 
   - it: should use serviceAccount from values
     set:
-      global:
-        platform: hmc
       serviceAccount:
         name: api-to-splunk-sa
     asserts:

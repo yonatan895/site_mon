@@ -22,19 +22,23 @@ def mock_endpoint() -> SourceEndpoint:
     )
 
 
+@pytest.fixture
+def endpoint() -> SourceEndpoint:
+    return SourceEndpoint(
+        name="test-ep",
+        url="https://test.example.com",
+        platform="hmc",
+        site="primary",
+        auth_type="basic",
+        creds_vault_path="secret/test",
+    )
+
+
 class TestEventsToHECLines:
-    def test_single_event(self) -> None:
+    def test_single_event(self, endpoint: SourceEndpoint) -> None:
         from src.poller import Poller as PollerCls
 
         poller = PollerCls.__new__(PollerCls)
-        endpoint = SourceEndpoint(
-            name="test-ep",
-            url="https://test.example.com",
-            platform="hmc",
-            site="primary",
-            auth_type="basic",
-            creds_vault_path="secret/test",
-        )
         event = PollingEvent(
             platform="hmc",
             site="primary",
@@ -49,18 +53,10 @@ class TestEventsToHECLines:
         assert parsed["host"] == "test-ep"
         assert parsed["sourcetype"] == "hmc:cpc_stats"
 
-    def test_list_of_events(self) -> None:
+    def test_list_of_events(self, endpoint: SourceEndpoint) -> None:
         from src.poller import Poller as PollerCls
 
         poller = PollerCls.__new__(PollerCls)
-        endpoint = SourceEndpoint(
-            name="test-ep",
-            url="https://test.example.com",
-            platform="hmc",
-            site="primary",
-            auth_type="basic",
-            creds_vault_path="secret/test",
-        )
         events = [
             PollingEvent(
                 platform="hmc",
@@ -82,63 +78,31 @@ class TestEventsToHECLines:
         lines = poller._events_to_hec_lines(events, endpoint)
         assert len(lines) == 2
 
-    def test_empty_list(self) -> None:
+    def test_empty_list(self, endpoint: SourceEndpoint) -> None:
         from src.poller import Poller as PollerCls
 
         poller = PollerCls.__new__(PollerCls)
-        endpoint = SourceEndpoint(
-            name="test-ep",
-            url="https://test.example.com",
-            platform="hmc",
-            site="primary",
-            auth_type="basic",
-            creds_vault_path="secret/test",
-        )
         assert poller._events_to_hec_lines([], endpoint) == []
 
-    def test_none_returns_empty(self) -> None:
+    def test_none_returns_empty(self, endpoint: SourceEndpoint) -> None:
         from src.poller import Poller as PollerCls
 
         poller = PollerCls.__new__(PollerCls)
-        endpoint = SourceEndpoint(
-            name="test-ep",
-            url="https://test.example.com",
-            platform="hmc",
-            site="primary",
-            auth_type="basic",
-            creds_vault_path="secret/test",
-        )
         assert poller._events_to_hec_lines(None, endpoint) == []
 
-    def test_dict_events(self) -> None:
+    def test_dict_events(self, endpoint: SourceEndpoint) -> None:
         from src.poller import Poller as PollerCls
 
         poller = PollerCls.__new__(PollerCls)
-        endpoint = SourceEndpoint(
-            name="test-ep",
-            url="https://test.example.com",
-            platform="hmc",
-            site="primary",
-            auth_type="basic",
-            creds_vault_path="secret/test",
-        )
         lines = poller._events_to_hec_lines([{"cpc_name": "CPA"}], endpoint)
         assert len(lines) == 1
 
 
 class TestPollingEventToHEC:
-    def test_correct_format(self) -> None:
+    def test_correct_format(self, endpoint: SourceEndpoint) -> None:
         from src.poller import Poller as PollerCls
 
         poller = PollerCls.__new__(PollerCls)
-        endpoint = SourceEndpoint(
-            name="test-ep",
-            url="https://test.example.com",
-            platform="hmc",
-            site="primary",
-            auth_type="basic",
-            creds_vault_path="secret/test",
-        )
         event = PollingEvent(
             platform="hmc",
             site="primary",
@@ -154,34 +118,18 @@ class TestPollingEventToHEC:
 
 
 class TestDictToHECLine:
-    def test_correct_format(self) -> None:
+    def test_correct_format(self, endpoint: SourceEndpoint) -> None:
         from src.poller import Poller as PollerCls
 
         poller = PollerCls.__new__(PollerCls)
-        endpoint = SourceEndpoint(
-            name="test-ep",
-            url="https://test.example.com",
-            platform="hmc",
-            site="primary",
-            auth_type="basic",
-            creds_vault_path="secret/test",
-        )
         hec = poller._dict_to_hec_line({"cpc_name": "CPA", "sourcetype": "hmc:custom"}, endpoint)
         assert hec["host"] == "test-ep"
         assert hec["sourcetype"] == "hmc:custom"
 
-    def test_fallback_sourcetype(self) -> None:
+    def test_fallback_sourcetype(self, endpoint: SourceEndpoint) -> None:
         from src.poller import Poller as PollerCls
 
         poller = PollerCls.__new__(PollerCls)
-        endpoint = SourceEndpoint(
-            name="test-ep",
-            url="https://test.example.com",
-            platform="hmc",
-            site="primary",
-            auth_type="basic",
-            creds_vault_path="secret/test",
-        )
         hec = poller._dict_to_hec_line({"cpc_name": "CPA"}, endpoint)
         assert hec["sourcetype"] == "hmc:data"
 
