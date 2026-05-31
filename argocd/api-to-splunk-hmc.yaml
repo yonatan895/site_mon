@@ -19,9 +19,8 @@ spec:
         vault:
           secretName: "api-to-splunk-hmc-secrets"
         networkPolicy:
-          apiEndpoints:
-            - hmc-primary.example.com
-            - hmc-backup.example.com
+          splunkHecCidrs: []
+          apiEndpointCidrs: []
   destination:
     server: https://kubernetes.default.svc
     namespace: mainframe-monitoring

@@ -19,9 +19,8 @@ spec:
         vault:
           secretName: "api-to-splunk-ds-secrets"
         networkPolicy:
-          apiEndpoints:
-            - ds-main.example.com
-            - ds-dr.example.com
+          splunkHecCidrs: []
+          apiEndpointCidrs: []
   destination:
     server: https://kubernetes.default.svc
     namespace: mainframe-monitoring

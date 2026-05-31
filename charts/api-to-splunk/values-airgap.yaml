@@ -9,8 +9,8 @@ config:
     url: "https://splunk-hec.internal.example.com:8088"
 
 networkPolicy:
-  splunkHecEndpoint: "splunk-hec.internal.example.com"
-  apiEndpoints: []
+  splunkHecCidrs: []
+  apiEndpointCidrs: []
 
 vault:
   secretStoreRef: "mainframe-vault-store"

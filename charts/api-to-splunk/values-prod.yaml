@@ -28,7 +28,8 @@ config:
 
 networkPolicy:
   enabled: true
-  splunkHecEndpoint: "splunk-hec.internal.example.com"
+  splunkHecCidrs: []
+  apiEndpointCidrs: []
 
 pvc:
   size: "5Gi"

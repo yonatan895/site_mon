@@ -69,8 +69,8 @@ pdb:
 
 networkPolicy:
   enabled: true
-  splunkHecEndpoint: "splunk-hec.example.com"
-  apiEndpoints: []
+  splunkHecCidrs: []
+  apiEndpointCidrs: []
 
 rulesConfigMap:
   name: "api-to-splunk-rules"
