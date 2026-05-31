@@ -13,7 +13,7 @@ from .utils import setup_logging
 logger = setup_logging(__name__)
 
 DEFAULT_HEALTH_CHECK_INTERVAL: int = 60
-DEFAULT_HEALTH_PATH: str = "/health"
+DEFAULT_HEALTH_PATH: str | None = None
 DEFAULT_HEALTH_TIMEOUT: int = 10
 
 
@@ -27,14 +27,14 @@ class EndpointHealthChecker:
         self,
         endpoints: list[SourceEndpoint],
         check_interval: int = DEFAULT_HEALTH_CHECK_INTERVAL,
-        health_path: str = DEFAULT_HEALTH_PATH,
+        health_path: str | None = DEFAULT_HEALTH_PATH,
     ) -> None:
         """Initialize the health checker.
 
         Args:
             endpoints: List of SourceEndpoint objects to monitor.
             check_interval: Seconds between health check cycles.
-            health_path: URL path to use for health probes.
+            health_path: URL path to use for health probes, or None to skip.
         """
         self.endpoints = endpoints
         self.check_interval = check_interval
@@ -86,17 +86,26 @@ class EndpointHealthChecker:
         """Execute health probes for all configured endpoints."""
         for endpoint in self.endpoints:
             try:
-                self._probe_endpoint(endpoint)
+                health_path = self._get_endpoint_health_path(endpoint)
+                self._probe_endpoint(endpoint, health_path)
             except Exception:
                 logger.exception("health_probe_unexpected_error", endpoint=endpoint.name)
 
-    def _probe_endpoint(self, endpoint: SourceEndpoint) -> None:
+    def _get_endpoint_health_path(self, endpoint: SourceEndpoint) -> str | None:
+        if endpoint.health_path is not None:
+            return endpoint.health_path if endpoint.health_path else None
+        return self.health_path
+
+    def _probe_endpoint(self, endpoint: SourceEndpoint, health_path: str | None) -> None:
         """Send a GET request to the endpoint's health path and update status.
 
         Args:
             endpoint: The SourceEndpoint to probe.
+            health_path: URL path for health probe, or None to skip probing.
         """
-        url = f"{endpoint.url.rstrip('/')}{self.health_path}"
+        if health_path is None:
+            return
+        url = f"{endpoint.url.rstrip('/')}{health_path}"
         start_time = time.monotonic()
         verify_ssl = os.environ.get("VERIFY_SSL", "true").lower() == "true"
 

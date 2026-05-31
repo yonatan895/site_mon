@@ -74,7 +74,9 @@ class TestStartStop:
 
 class TestHealthProbes:
     def test_successful_probe_marks_healthy(self, test_endpoints: list[SourceEndpoint]) -> None:
-        checker = EndpointHealthChecker(endpoints=test_endpoints, check_interval=1)
+        checker = EndpointHealthChecker(
+            endpoints=test_endpoints, check_interval=1, health_path="/health"
+        )
 
         with requests_mock.Mocker() as m:
             m.get("https://ep1.example.com/health", status_code=200)
@@ -85,7 +87,9 @@ class TestHealthProbes:
         assert checker.is_healthy("ep2") is True
 
     def test_failed_probe_marks_unhealthy(self, test_endpoints: list[SourceEndpoint]) -> None:
-        checker = EndpointHealthChecker(endpoints=test_endpoints, check_interval=1)
+        checker = EndpointHealthChecker(
+            endpoints=test_endpoints, check_interval=1, health_path="/health"
+        )
 
         with requests_mock.Mocker() as m:
             m.get("https://ep1.example.com/health", status_code=500)
@@ -98,7 +102,9 @@ class TestHealthProbes:
         assert status.consecutive_failures == 1
 
     def test_consecutive_failures_threshold(self, test_endpoints: list[SourceEndpoint]) -> None:
-        checker = EndpointHealthChecker(endpoints=test_endpoints[:1], check_interval=1)
+        checker = EndpointHealthChecker(
+            endpoints=test_endpoints[:1], check_interval=1, health_path="/health"
+        )
 
         with requests_mock.Mocker() as m:
             m.get("https://ep1.example.com/health", status_code=500)
@@ -111,7 +117,9 @@ class TestHealthProbes:
         assert status.degraded_since is not None
 
     def test_recovery_after_failures(self, test_endpoints: list[SourceEndpoint]) -> None:
-        checker = EndpointHealthChecker(endpoints=test_endpoints[:1], check_interval=1)
+        checker = EndpointHealthChecker(
+            endpoints=test_endpoints[:1], check_interval=1, health_path="/health"
+        )
 
         with requests_mock.Mocker() as m:
             m.get("https://ep1.example.com/health", status_code=500)
@@ -129,7 +137,9 @@ class TestHealthProbes:
         assert status.degraded_since is None
 
     def test_timeout_considered_failure(self, test_endpoints: list[SourceEndpoint]) -> None:
-        checker = EndpointHealthChecker(endpoints=test_endpoints[:1], check_interval=1)
+        checker = EndpointHealthChecker(
+            endpoints=test_endpoints[:1], check_interval=1, health_path="/health"
+        )
 
         with requests_mock.Mocker() as m:
             m.get("https://ep1.example.com/health", exc=Exception("timeout"))

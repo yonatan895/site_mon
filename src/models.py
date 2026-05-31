@@ -18,6 +18,7 @@ class SourceEndpoint(BaseModel):
     rate_limit_rps: float = 5.0
     timeout: int = 30
     role: str | None = None  # "primary" | "backup" | "dr" | "secondary" or None (infer from name)
+    health_path: str | None = None  # None skips health probing (always healthy)
 
 
 class HealthStatus(BaseModel):

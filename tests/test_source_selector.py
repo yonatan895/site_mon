@@ -178,7 +178,7 @@ class TestMultiEndpointMode:
         assert len(active) == 1
         assert active[0].name == "ds-main"
 
-    def test_all_unhealthy_returns_empty(
+    def test_all_unhealthy_returns_all_as_fallback(
         self,
         multi_endpoint_primary: SourceEndpoint,
         multi_endpoint_secondary: SourceEndpoint,
@@ -197,7 +197,7 @@ class TestMultiEndpointMode:
             policy={},
         )
         active = selector.get_active_endpoints()
-        assert len(active) == 0
+        assert len(active) == 2
 
 
 class TestEndpointIsPrimary:

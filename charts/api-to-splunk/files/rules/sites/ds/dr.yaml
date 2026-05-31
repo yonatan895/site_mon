@@ -13,6 +13,7 @@ endpoints:
     creds_vault_path: "secret/mainframe/ds/dr"
     rate_limit_rps: 5
     timeout: 30
+    health_path: null
 
 data_types:
   - arrays

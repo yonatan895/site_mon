@@ -130,14 +130,22 @@ class SourceSelector:
         """
         healthy = [ep for ep in endpoints if self.validate_endpoint(ep)]
         unhealthy_count = len(endpoints) - len(healthy)
-        if unhealthy_count > 0:
-            logger.warning(
-                "some_endpoints_unhealthy",
-                site=site_name,
-                healthy=len(healthy),
-                unhealthy=unhealthy_count,
-            )
-        return healthy
+        if healthy:
+            if unhealthy_count > 0:
+                logger.warning(
+                    "some_endpoints_unhealthy",
+                    site=site_name,
+                    healthy=len(healthy),
+                    unhealthy=unhealthy_count,
+                )
+            return healthy
+
+        logger.warning(
+            "all_endpoints_degraded_falling_back",
+            site=site_name,
+            endpoint_count=len(endpoints),
+        )
+        return endpoints
 
     def validate_endpoint(self, endpoint: SourceEndpoint) -> bool:
         """Check if an endpoint passes health criteria.
