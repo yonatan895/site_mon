@@ -12,9 +12,12 @@ spec:
     helm:
       valueFiles:
         - values.yaml
+        - values-prod.yaml
       values: |
         global:
           platform: hmc
+        vault:
+          secretName: "api-to-splunk-hmc-secrets"
         networkPolicy:
           apiEndpoints:
             - hmc-primary.example.com

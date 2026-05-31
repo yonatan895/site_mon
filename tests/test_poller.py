@@ -933,20 +933,7 @@ class TestPollerRunOnce:
         p.health_checker.start = MagicMock()
         p.health_checker.stop = MagicMock()
 
-        import threading
-        import time
-
-        threading.Event()
-
-        def stop_after_delay():
-            time.sleep(0.1)
-            import signal
-
-            signal.pthread_kill(threading.main_thread().ident, signal.SIGINT)
-
-        t = threading.Thread(target=stop_after_delay, daemon=True)
-
-        t.start()
+        p.run_once = MagicMock(side_effect=KeyboardInterrupt)
         with contextlib.suppress(KeyboardInterrupt):
             p.run_forever(interval_seconds=300)
         p.health_checker.start.assert_called_once()

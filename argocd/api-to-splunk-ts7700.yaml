@@ -12,9 +12,12 @@ spec:
     helm:
       valueFiles:
         - values.yaml
+        - values-prod.yaml
       values: |
         global:
           platform: ts7700
+        vault:
+          secretName: "api-to-splunk-ts7700-secrets"
         networkPolicy:
           apiEndpoints:
             - ts7700-primary.example.com

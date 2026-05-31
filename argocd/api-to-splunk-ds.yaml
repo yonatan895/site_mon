@@ -12,9 +12,12 @@ spec:
     helm:
       valueFiles:
         - values.yaml
+        - values-prod.yaml
       values: |
         global:
           platform: ds
+        vault:
+          secretName: "api-to-splunk-ds-secrets"
         networkPolicy:
           apiEndpoints:
             - ds-main.example.com
