@@ -1,7 +1,7 @@
 image:
   registry: ghcr.io
   repository: yonatan895/site_mon/site-mon
-  tag: latest
+  tag: "1.0.0"
   pullPolicy: IfNotPresent
 
 replicaCount: 2
@@ -25,6 +25,7 @@ config:
     timeout: 30
   spool:
     maxSizeMb: 1024
+  verifySsl: true
 
 networkPolicy:
   enabled: true

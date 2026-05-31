@@ -287,9 +287,8 @@ class TestHMCClient:
             from src.poller import HMCClient
 
             client = HMCClient(hmc_endpoint)
-            creds = client._load_creds()
-            assert creds["username"] == "admin"
-            assert creds["password"] == ""
+            with pytest.raises(RuntimeError, match="HMC_PRIMARY_PASSWORD"):
+                client._load_creds()
 
     def test_query_cpc_stats(self, hmc_endpoint: SourceEndpoint, mock_session: MagicMock) -> None:
         with patch.dict(

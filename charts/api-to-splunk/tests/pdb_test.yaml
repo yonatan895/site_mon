@@ -5,6 +5,7 @@ release:
 set:
   global:
     platform: hmc
+  replicaCount: 2
 templates:
   - pdb.yaml
 tests:
@@ -44,3 +45,10 @@ tests:
       - equal:
           path: metadata.name
           value: test-release-api-to-splunk-hmc
+
+  - it: should not render when replicaCount is 1
+    set:
+      replicaCount: 1
+    asserts:
+      - hasDocuments:
+          count: 0

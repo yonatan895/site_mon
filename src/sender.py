@@ -1,8 +1,10 @@
 """Spool watcher: reads NDJSON spool files and sends them to Splunk HEC."""
 
 import os
+import signal
 import threading
 import time
+from typing import Any
 
 import uvicorn
 
@@ -95,8 +97,16 @@ class Sender:
         logger.info("sender_loop_started", watch_interval=DEFAULT_WATCH_INTERVAL)
         last_cleanup = time.monotonic()
 
+        stop_event = threading.Event()
+
+        def _handle_shutdown(signum: int, frame: Any) -> None:
+            logger.info("sender_shutdown_signal", signal=signum)
+            stop_event.set()
+
+        signal.signal(signal.SIGTERM, _handle_shutdown)
+
         try:
-            while True:
+            while not stop_event.is_set():
                 try:
                     pending = self.spool_manager.list_pending()
                     if pending:
@@ -109,7 +119,7 @@ class Sender:
                 except Exception:
                     logger.exception("sender_cycle_error")
 
-                time.sleep(DEFAULT_WATCH_INTERVAL)
+                stop_event.wait(timeout=DEFAULT_WATCH_INTERVAL)
 
         except KeyboardInterrupt:
             logger.info("sender_interrupted")

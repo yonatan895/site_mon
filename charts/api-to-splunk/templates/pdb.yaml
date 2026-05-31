@@ -1,3 +1,4 @@
+{{- if gt (.Values.replicaCount | int) 1 }}
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -9,3 +10,4 @@ spec:
   selector:
     matchLabels:
       {{- include "api-to-splunk.selectorLabels" . | nindent 6 }}
+{{- end }}

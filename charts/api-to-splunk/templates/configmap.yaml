@@ -18,3 +18,4 @@ data:
   LOG_LEVEL: {{ .Values.config.logLevel | quote }}
   HEALTH_PROBE_INTERVAL: {{ .Values.config.healthProbeInterval | quote }}
   MAX_CONSECUTIVE_FAILURES: {{ .Values.config.maxConsecutiveFailures | quote }}
+  VERIFY_SSL: {{ .Values.config.verifySsl | quote }}
