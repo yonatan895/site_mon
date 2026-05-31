@@ -251,7 +251,7 @@ class Poller:
     ) -> dict[str, Any]:
         """Convert a PollingEvent to a Splunk HEC event dict."""
         return {
-            "time": event.timestamp.strftime("%s.%f"),
+            "time": str(event.timestamp.timestamp()),
             "host": endpoint.name,
             "source": f"{event.platform}:{event.data_type}",
             "sourcetype": event.sourcetype,
@@ -266,7 +266,7 @@ class Poller:
     ) -> dict[str, Any]:
         """Convert a raw dict to a Splunk HEC event dict."""
         return {
-            "time": datetime.now(UTC).strftime("%s.%f"),
+            "time": str(datetime.now(UTC).timestamp()),
             "host": endpoint.name,
             "source": f"{endpoint.platform}:data",
             "sourcetype": event_dict.get("sourcetype", f"{endpoint.platform}:data"),
@@ -850,7 +850,7 @@ class TS7700Client(BaseAPIClient):
                 "Content-Type": "application/json",
             }
         )
-        session.verify = False
+        session.verify = os.environ.get("VERIFY_SSL", "true").lower() == "true"
         self._session = session
         self.logger.info("ts7700_session_created", url=self.endpoint.url)
         return self._session

@@ -37,3 +37,6 @@ pvc:
 
 pdb:
   minAvailable: 1
+
+securityContext:
+  fsGroup: 0

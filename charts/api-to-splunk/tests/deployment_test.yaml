@@ -86,6 +86,9 @@ tests:
       - equal:
           path: spec.template.spec.securityContext.runAsUser
           value: 1001
+      - equal:
+          path: spec.template.spec.securityContext.fsGroup
+          value: 0
 
   - it: should have liveness probe on poller
     asserts:
