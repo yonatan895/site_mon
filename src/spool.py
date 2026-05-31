@@ -71,12 +71,14 @@ class SpoolManager:
         )
         ensure_dir(str(self.spool_dir))
         ensure_dir(str(self.dead_letter_dir))
+        self._cached_size: int = self._scan_spool_size()
 
         logger.info(
             "spool_manager_initialized",
             spool_dir=str(self.spool_dir),
             max_size_mb=max_spool_size_mb,
             dead_letter_dir=str(self.dead_letter_dir),
+            cached_size_bytes=self._cached_size,
         )
 
     def write_ndjson(self, content: str, batch_id: str = "") -> str:
@@ -111,6 +113,7 @@ class SpoolManager:
         try:
             tmp_path.write_text(content, encoding="utf-8")
             os.rename(str(tmp_path), str(filepath))
+            self._cached_size += filepath.stat().st_size
         except Exception:
             if tmp_path.exists():
                 tmp_path.unlink(missing_ok=True)
@@ -126,12 +129,12 @@ class SpoolManager:
         return filename
 
     def list_pending(self) -> list[str]:
-        """List all pending .ndjson files sorted by name (roughly creation order)."""
+        """List all pending .ndjson files."""
         if not self.spool_dir.exists():
             return []
-        return sorted(
+        return [
             e.name for e in self.spool_dir.iterdir() if e.is_file() and e.suffix == NDJSON_EXTENSION
-        )
+        ]
 
     def read_ndjson_batch(self, max_files: int = 50) -> list[SpoolEntry]:
         """Read up to max_files pending files, renaming to .processing.
@@ -179,7 +182,9 @@ class SpoolManager:
             if fp.suffix != ext:
                 fp = fp.with_suffix(ext)
             if fp.exists():
+                size = fp.stat().st_size
                 fp.unlink()
+                self._cached_size = max(0, self._cached_size - size)
                 logger.debug("file_acknowledged", filename=str(fp))
                 return
         logger.warning("ack_file_not_found", filename=filename)
@@ -229,8 +234,10 @@ class SpoolManager:
         src = Path(filepath)
         if not src.exists():
             return
+        size = src.stat().st_size
         dst = self.dead_letter_dir / src.name
         os.rename(str(src), str(dst))
+        self._cached_size = max(0, self._cached_size - size)
         logger.info("moved_to_dead_letter", filename=src.name)
 
     def cleanup_old_files(self, max_age_hours: int = 24) -> int:
@@ -273,6 +280,9 @@ class SpoolManager:
         }
 
     def _get_spool_size(self) -> int:
+        return self._cached_size
+
+    def _scan_spool_size(self) -> int:
         if not self.spool_dir.exists():
             return 0
         total = 0
