@@ -1,0 +1,18 @@
+platform: hmc
+failover_mode: "primary_backup"
+
+health_check:
+  path: "/api/console/version"
+  interval_seconds: 60
+  timeout_seconds: 10
+  max_consecutive_failures: 3
+
+primary_data_types:
+  - cpc-stats
+  - lpars
+
+backup_data_types:
+  - cpc-stats
+
+rate_limit:
+  requests_per_second: 5

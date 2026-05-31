@@ -1,7 +1,7 @@
 """Pydantic models for the mainframe infrastructure monitoring pipeline."""
 
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -13,7 +13,7 @@ class SpoolRecord(BaseModel):
     platform: str
     site: str
     endpoint: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     retry_count: int = 0
     max_retries: int = 5
 
@@ -34,19 +34,19 @@ class HealthStatus(BaseModel):
     """Health status of a monitored endpoint."""
     endpoint_name: str
     is_healthy: bool = True
-    last_check: Optional[datetime] = None
+    last_check: datetime | None = None
     consecutive_failures: int = 0
     max_consecutive_failures: int = 3
-    degraded_since: Optional[datetime] = None
-    response_time_ms: Optional[float] = None
+    degraded_since: datetime | None = None
+    response_time_ms: float | None = None
 
 
 class FieldExtraction(BaseModel):
     """Defines how to extract a field from raw response data."""
     field_name: str
     json_path: str  # jmespath expression
-    default: Optional[Any] = None
-    transform: Optional[str] = None  # "int" | "float" | "str" | "bool"
+    default: Any | None = None
+    transform: str | None = None  # "int" | "float" | "str" | "bool"
 
 
 class ThresholdRule(BaseModel):
@@ -86,7 +86,7 @@ class PollingEvent(BaseModel):
     data_type: str
     sourcetype: str
     index: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
     fields: dict[str, Any] = Field(default_factory=dict)
     alerts: list[dict[str, Any]] = Field(default_factory=list)
     raw_response_metadata: dict[str, Any] = Field(default_factory=dict)

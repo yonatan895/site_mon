@@ -3,13 +3,11 @@
 import os
 import threading
 import time
-from typing import Optional
 
-import structlog
 import uvicorn
 
-from .spool import SpoolManager
 from .splunk_hec import SplunkHECClient
+from .spool import SpoolManager
 from .utils import ensure_dir, setup_logging
 
 logger = setup_logging(__name__)
@@ -28,8 +26,8 @@ class Sender:
     def __init__(
         self,
         spool_dir: str = "/spool",
-        hec_url: Optional[str] = None,
-        hec_token: Optional[str] = None,
+        hec_url: str | None = None,
+        hec_token: str | None = None,
     ) -> None:
         ensure_dir(spool_dir)
 
@@ -144,7 +142,8 @@ def main() -> None:
         spool_dir=spool_dir, hec_url=hec_url, hec_token=hec_token
     )
 
-    from .health import app as health_app, init_health
+    from .health import app as health_app
+    from .health import init_health
 
     init_health(spool_manager_instance=sender.spool_manager)
 

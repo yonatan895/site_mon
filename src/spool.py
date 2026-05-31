@@ -1,12 +1,11 @@
 """Spool management for reliable NDJSON event delivery between containers."""
 
+import contextlib
 import os
 import time
 import uuid
 from pathlib import Path
-from typing import Optional, NamedTuple
-
-import structlog
+from typing import NamedTuple
 
 from .utils import ensure_dir, setup_logging
 
@@ -63,7 +62,7 @@ class SpoolManager:
         self,
         spool_dir: str = "/spool",
         max_spool_size_mb: int = 1024,
-        dead_letter_dir: Optional[str] = None,
+        dead_letter_dir: str | None = None,
     ) -> None:
         self.spool_dir = Path(spool_dir)
         self.max_spool_size_bytes = max_spool_size_mb * 1024 * 1024
@@ -99,7 +98,7 @@ class SpoolManager:
         if not content.strip():
             raise ValueError("Cannot write empty NDJSON content")
 
-        if self._get_spool_size() > self.max_spool_size_bytes:
+        if self._get_spool_size() >= self.max_spool_size_bytes:
             raise SpoolFullError(
                 f"Spool directory exceeds maximum size of "
                 f"{self.max_spool_size_bytes / 1024 / 1024:.0f} MB — "
@@ -287,8 +286,6 @@ class SpoolManager:
         total = 0
         for entry in self.spool_dir.iterdir():
             if entry.is_file():
-                try:
+                with contextlib.suppress(FileNotFoundError):
                     total += entry.stat().st_size
-                except FileNotFoundError:
-                    pass
         return total

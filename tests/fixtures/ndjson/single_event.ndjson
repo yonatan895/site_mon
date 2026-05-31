@@ -1,0 +1,1 @@
+{"time": "1717171200.000000", "host": "test-hmc", "source": "hmc:cpc-stats", "sourcetype": "hmc:cpc_stats", "index": "mainframe_metrics", "event": {"cpc_name": "CPCA", "status": "operating", "cpu_usage_pct": 45.2}}

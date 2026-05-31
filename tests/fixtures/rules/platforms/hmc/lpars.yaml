@@ -1,0 +1,18 @@
+platform: hmc
+sourcetype: "hmc:lpars"
+index: "mainframe_metrics"
+
+extractions:
+  - field_name: "lpar_name"
+    json_path: "name"
+  - field_name: "cpc_name"
+    json_path: "cpc_name"
+  - field_name: "status"
+    json_path: "status"
+
+thresholds:
+  - field: "status"
+    operator: "ne"
+    value: "active"
+    severity: "warning"
+    message_template: "LPAR {lpar_name} status is {status}"

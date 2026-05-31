@@ -6,11 +6,10 @@ understands newline-delimited JSON, so no transformation is needed.
 
 import gzip
 import json
+import logging
 import time
-from typing import Any, Optional
 from urllib.parse import urljoin
 
-import structlog
 import urllib3
 from tenacity import (
     before_sleep_log,
@@ -51,7 +50,7 @@ class SplunkHECClient:
         self.batch_size = batch_size
         self.ack_enabled = ack_enabled
         self.timeout = timeout
-        self.channel_id: Optional[str] = None
+        self.channel_id: str | None = None
 
         self.pool = urllib3.PoolManager(
             num_pools=max_connections,
@@ -128,7 +127,7 @@ class SplunkHECClient:
         stop=stop_after_attempt(5),
         wait=wait_exponential_jitter(initial=1, max=64, jitter=1),
         retry=retry_if_exception_type((urllib3.exceptions.HTTPError, ConnectionError)),
-        before_sleep=before_sleep_log(logger, "warning"),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
         reraise=True,
     )
     def _do_post(self, payload: str) -> None:
@@ -168,7 +167,8 @@ class SplunkHECClient:
             )
             time.sleep(wait_seconds)
             raise urllib3.exceptions.HTTPError(
-                f"HEC returned {response.status}: {response.data[:500]}"
+                f"HEC returned {response.status}: "
+                f"{response.data[:500]!r}"
             )
 
         error_msg = (
@@ -176,7 +176,7 @@ class SplunkHECClient:
             f"{response.data[:500].decode('utf-8', errors='replace')}"
         )
         logger.error("hec_fatal_error", status=response.status)
-        raise urllib3.exceptions.HTTPError(error_msg)
+        raise RuntimeError(error_msg)
 
     def close(self) -> None:
         if self.pool:
