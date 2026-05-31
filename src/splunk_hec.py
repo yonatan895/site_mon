@@ -7,7 +7,6 @@ understands newline-delimited JSON, so no transformation is needed.
 import gzip
 import json
 import logging
-import time
 from urllib.parse import urljoin
 
 import urllib3
@@ -156,16 +155,11 @@ class SplunkHECClient:
 
         if response.status in (429, 503):
             retry_after = response.headers.get("Retry-After", "5")
-            try:
-                wait_seconds = int(retry_after)
-            except ValueError:
-                wait_seconds = 5
             logger.warning(
                 "hec_retryable_error",
                 status=response.status,
-                retry_after=wait_seconds,
+                retry_after=retry_after,
             )
-            time.sleep(wait_seconds)
             raise urllib3.exceptions.HTTPError(
                 f"HEC returned {response.status}: {response.data[:500]!r}"
             )

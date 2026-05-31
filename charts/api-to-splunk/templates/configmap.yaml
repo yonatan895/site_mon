@@ -9,6 +9,7 @@ data:
   POLL_INTERVAL_SECONDS: {{ .Values.config.pollIntervalSeconds | quote }}
   SPLUNK_HEC_URL: {{ .Values.config.hec.url | quote }}
   SPLUNK_HEC_BATCH_SIZE: {{ .Values.config.hec.batchSize | quote }}
+  SPLUNK_HEC_BATCH_INTERVAL_MS: {{ .Values.config.hec.batchIntervalMs | quote }}
   SPLUNK_HEC_ACK_ENABLED: {{ .Values.config.hec.ackEnabled | quote }}
   SPLUNK_HEC_MAX_CONNECTIONS: {{ .Values.config.hec.maxConnections | quote }}
   SPLUNK_HEC_TIMEOUT: {{ .Values.config.hec.timeout | quote }}

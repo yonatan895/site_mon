@@ -45,6 +45,16 @@ tests:
           path: data.SPLUNK_HEC_BATCH_SIZE
           value: "500"
 
+  - it: should set SPLUNK_HEC_BATCH_INTERVAL_MS
+    set:
+      config:
+        hec:
+          batchIntervalMs: 200
+    asserts:
+      - equal:
+          path: data.SPLUNK_HEC_BATCH_INTERVAL_MS
+          value: "200"
+
   - it: should set SPLUNK_HEC_ACK_ENABLED
     set:
       config:
