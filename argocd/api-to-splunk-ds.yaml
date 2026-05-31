@@ -3,6 +3,10 @@ kind: Application
 metadata:
   name: api-to-splunk-ds
   namespace: argocd
+  annotations:
+    argocd-image-updater.argoproj.io/image-list: site-mon=ghcr.io/yonatan895/site_mon/site-mon
+    argocd-image-updater.argoproj.io/site-mon.update-strategy: semver
+    argocd-image-updater.argoproj.io/site-mon.helm.image-tag: image.tag
 spec:
   project: default
   source:
