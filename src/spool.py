@@ -2,6 +2,7 @@
 
 import contextlib
 import os
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -72,6 +73,7 @@ class SpoolManager:
         ensure_dir(str(self.spool_dir))
         ensure_dir(str(self.dead_letter_dir))
         self._cached_size: int = self._scan_spool_size()
+        self._lock = threading.Lock()
 
         logger.info(
             "spool_manager_initialized",
@@ -140,6 +142,7 @@ class SpoolManager:
         """Read up to max_files pending files, renaming to .processing.
 
         Files are renamed to .processing to prevent re-reading.
+        Thread-safe: lock protects the list-pending + claim gap.
 
         Args:
             max_files: Maximum number of files to read in one batch.
@@ -147,28 +150,31 @@ class SpoolManager:
         Returns:
             List of SpoolEntry (filename, raw NDJSON content, retry_count).
         """
-        pending = self.list_pending()[:max_files]
-        entries: list[SpoolEntry] = []
+        with self._lock:
+            pending = self.list_pending()[:max_files]
+            if not pending:
+                return []
 
-        for filename in pending:
-            filepath = self.spool_dir / filename
-            processing_path = filepath.with_suffix(PROCESSING_EXTENSION)
+            entries: list[SpoolEntry] = []
+            for filename in pending:
+                filepath = self.spool_dir / filename
+                processing_path = filepath.with_suffix(PROCESSING_EXTENSION)
 
-            try:
-                os.rename(str(filepath), str(processing_path))
-            except FileNotFoundError:
-                logger.debug("file_already_claimed", filename=filename)
-                continue
+                try:
+                    os.rename(str(filepath), str(processing_path))
+                except FileNotFoundError:
+                    logger.debug("file_already_claimed", filename=filename)
+                    continue
 
-            try:
-                content = processing_path.read_text(encoding="utf-8")
-            except Exception as e:
-                logger.error("failed_to_read_ndjson", filename=filename, error=str(e))
-                self.move_to_dead_letter(str(processing_path))
-                continue
+                try:
+                    content = processing_path.read_text(encoding="utf-8")
+                except Exception as e:
+                    logger.error("failed_to_read_ndjson", filename=filename, error=str(e))
+                    self.move_to_dead_letter(str(processing_path))
+                    continue
 
-            _, retry, _ = _parse_filename(filename)
-            entries.append(SpoolEntry(filename=filename, content=content, retry_count=retry))
+                _, retry, _ = _parse_filename(filename)
+                entries.append(SpoolEntry(filename=filename, content=content, retry_count=retry))
 
         if entries:
             total_lines = sum(e.content.count("\n") for e in entries)
