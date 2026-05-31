@@ -165,6 +165,65 @@ class TestInitHealth:
         assert health_mod.health_checker is mock_hc
         assert health_mod.spool_manager is mock_sm
 
+    def test_partial_init_only_spool(self) -> None:
+        import src.health as health_mod
+
+        health_mod.health_checker = None
+        mock_sm = MagicMock()
+        health_mod.init_health(spool_manager_instance=mock_sm)
+        assert health_mod.spool_manager is mock_sm
+        assert health_mod.health_checker is None
+
+    def test_partial_init_only_health(self) -> None:
+        import src.health as health_mod
+
+        health_mod.spool_manager = None
+        mock_hc = MagicMock()
+        health_mod.init_health(health_checker_instance=mock_hc)
+        assert health_mod.health_checker is mock_hc
+        assert health_mod.spool_manager is None
+
+    def test_no_args_no_change(self) -> None:
+        import src.health as health_mod
+
+        health_mod.health_checker = None
+        health_mod.spool_manager = None
+        health_mod.init_health()
+        assert health_mod.health_checker is None
+        assert health_mod.spool_manager is None
+
+
+class TestPrometheusMetrics:
+    def test_update_prometheus_metrics(self) -> None:
+        import src.health as health_mod
+        if not health_mod.PROMETHEUS_AVAILABLE:
+            pytest.skip("prometheus_client not installed")
+
+        mock_spool = MagicMock()
+        mock_spool.get_spool_stats.return_value = {
+            "total_size_mb": 42.0,
+            "pending_count": 7,
+            "dead_letter_count": 2,
+            "processing_count": 3,
+        }
+        health_mod.spool_manager = mock_spool
+
+        mock_hc = MagicMock()
+        healthy = MagicMock()
+        healthy.is_healthy = True
+        unhealthy = MagicMock()
+        unhealthy.is_healthy = False
+        mock_hc.get_all_statuses.return_value = {
+            "ep1": healthy,
+            "ep2": unhealthy,
+        }
+        health_mod.health_checker = mock_hc
+
+        health_mod._update_prometheus_metrics()
+
+        mock_spool.get_spool_stats.assert_called_once()
+        mock_hc.get_all_statuses.assert_called_once()
+
 
 class TestRoutes:
     def test_healthz_is_get_method(self, client: TestClient) -> None:
