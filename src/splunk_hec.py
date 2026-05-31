@@ -33,6 +33,12 @@ class SplunkHECClient:
 
     Supports connection pooling, gzip compression, batching, and Splunk's
     indexer acknowledgment protocol for guaranteed delivery.
+
+    When ack_enabled is True (default), a channel is created and its ID is
+    included in the X-Splunk-Request-Channel header for event ordering
+    guarantees. Note that this client does NOT poll the ACK endpoint
+    (/services/collector/ack) to verify indexer confirmation. For full
+    end-to-end acknowledgment, implement ACK polling in a future iteration.
     """
 
     def __init__(
