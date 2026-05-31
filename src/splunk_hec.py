@@ -127,7 +127,7 @@ class SplunkHECClient:
         stop=stop_after_attempt(5),
         wait=wait_exponential_jitter(initial=1, max=64, jitter=1),
         retry=retry_if_exception_type((urllib3.exceptions.HTTPError, ConnectionError)),
-        before_sleep=before_sleep_log(logger, logging.WARNING),
+        before_sleep=before_sleep_log(logging.getLogger("src.splunk_hec"), logging.WARNING),
         reraise=True,
     )
     def _do_post(self, payload: str) -> None:

@@ -159,7 +159,7 @@ def retry_with_backoff(
         @retry(
             stop=stop_after_attempt(max_attempts),
             wait=wait_exponential_jitter(initial=base_delay, max=max_delay, jitter=base_delay),
-            before_sleep=before_sleep_log(_get_utils_logger(), logging.WARNING),
+            before_sleep=before_sleep_log(logging.getLogger("src.utils"), logging.WARNING),
             reraise=True,
         )
         def wrapper(*args: Any, **kwargs: Any) -> Any:
