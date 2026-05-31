@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: api-to-splunk-ts7700
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://git.internal.example.com/monitoring/api-to-splunk.git
+    targetRevision: main
+    path: charts/api-to-splunk
+    helm:
+      valueFiles:
+        - values.yaml
+      values: |
+        global:
+          platform: ts7700
+        networkPolicy:
+          apiEndpoints:
+            - ts7700-primary.example.com
+            - ts7700-backup.example.com
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mainframe-monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

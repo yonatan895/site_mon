@@ -1,0 +1,11 @@
+# DS8000 Platform - Common Fields
+# Shared configuration inherited by all DS8000 data type rules.
+platform: ds
+
+common_fields:
+  platform: ds
+
+metric_prefix: "ds"
+default_sourcetype: "ds:metrics"
+default_index: "mainframe_metrics"
+interval_seconds: 300

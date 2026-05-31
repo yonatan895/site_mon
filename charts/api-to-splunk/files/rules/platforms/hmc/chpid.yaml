@@ -1,0 +1,24 @@
+# HMC Platform - CHPID Extraction Rules
+# Collects channel path identifier status and configuration data.
+platform: hmc
+sourcetype: "hmc:chpid"
+index: "mainframe_metrics"
+
+extractions:
+  - field: "chpid_id"
+    json_path: "$.chpid_id"
+  - field: "state"
+    json_path: "$.state"
+  - field: "channel_type"
+    json_path: "$.channel_type"
+  - field: "cpc_name"
+    json_path: "$.cpc_name"
+  - field: "description"
+    json_path: "$.description"
+
+thresholds:
+  - field: "state"
+    operator: "ne"
+    value: "operational"
+    severity: "warning"
+    message_template: "CHPID {chpid_id} on CPC {cpc_name} is not operational (state: {state})"

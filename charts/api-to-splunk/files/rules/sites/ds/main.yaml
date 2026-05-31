@@ -1,0 +1,21 @@
+# DS8000 Site - Main
+# Primary DS8000 endpoint for full data type collection (dual-active mode).
+site_name: ds-main
+platform: ds
+is_primary: true
+
+endpoints:
+  - name: ds-main
+    url: "https://ds-main.example.com"
+    platform: ds
+    site: main
+    auth_type: basic
+    creds_vault_path: "secret/mainframe/ds/main"
+    rate_limit_rps: 5
+    timeout: 30
+
+data_types:
+  - arrays
+  - ports
+  - ranks
+  - replication

@@ -1,0 +1,35 @@
+# HMC Platform - LPAR Extraction Rules
+# Collects logical partition configuration, status, and resource allocation data.
+platform: hmc
+sourcetype: "hmc:lpar"
+index: "mainframe_metrics"
+
+extractions:
+  - field: "lpar_name"
+    json_path: "$.lpar_name"
+  - field: "cpc_name"
+    json_path: "$.cpc_name"
+  - field: "status"
+    json_path: "$.status"
+  - field: "os_type"
+    json_path: "$.os_type"
+  - field: "activation_mode"
+    json_path: "$.activation_mode"
+  - field: "num_cpus"
+    json_path: "$.num_cpus"
+  - field: "memory_mb"
+    json_path: "$.memory_mb"
+  - field: "weight"
+    json_path: "$.weight"
+
+thresholds:
+  - field: "status"
+    operator: "ne"
+    value: "operating"
+    severity: "warning"
+    message_template: "LPAR {lpar_name} is not operating (status: {status})"
+  - field: "memory_mb"
+    operator: "lt"
+    value: 1024
+    severity: "info"
+    message_template: "LPAR {lpar_name} has low memory ({memory_mb} MB)"

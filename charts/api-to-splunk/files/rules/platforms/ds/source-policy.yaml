@@ -1,0 +1,19 @@
+# DS8000 Platform - Source Policy
+# Defines data source failover behavior (dual-active), health checks, and rate limiting.
+platform: ds
+failover_mode: "dual_active"
+
+health_check:
+  path: "/api/v1/system"
+  interval_seconds: 60
+  timeout_seconds: 10
+  max_consecutive_failures: 3
+
+data_types:
+  - arrays
+  - ports
+  - ranks
+  - replication
+
+rate_limit:
+  requests_per_second: 5

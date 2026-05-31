@@ -1,0 +1,40 @@
+# TS7700 Platform - Cache Extraction Rules
+# Collects tape volume cache utilization, hit ratio, and premigration queue metrics.
+platform: ts7700
+sourcetype: "ts7700:cache"
+index: "mainframe_metrics"
+
+extractions:
+  - field: "cluster_id"
+    json_path: "$.cluster_id"
+  - field: "cache_id"
+    json_path: "$.cache_id"
+  - field: "cache_type"
+    json_path: "$.cache_type"
+  - field: "total_cache_gb"
+    json_path: "$.total_cache_gb"
+  - field: "used_cache_gb"
+    json_path: "$.used_cache_gb"
+  - field: "free_cache_gb"
+    json_path: "$.free_cache_gb"
+  - field: "hit_ratio_pct"
+    json_path: "$.hit_ratio_pct"
+  - field: "premigration_queue_depth"
+    json_path: "$.premigration_queue_depth"
+
+thresholds:
+  - field: "hit_ratio_pct"
+    operator: "lt"
+    value: 80
+    severity: "warning"
+    message_template: "TS7700 cache hit ratio low at {hit_ratio_pct}%"
+  - field: "used_cache_pct"
+    operator: "gt"
+    value: 90
+    severity: "warning"
+    message_template: "TS7700 cache utilization high at {used_cache_pct}%"
+  - field: "premigration_queue_depth"
+    operator: "gt"
+    value: 1000
+    severity: "warning"
+    message_template: "TS7700 premigration queue depth critical at {premigration_queue_depth}"

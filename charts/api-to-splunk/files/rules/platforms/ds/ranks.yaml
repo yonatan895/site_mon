@@ -1,0 +1,30 @@
+# DS8000 Platform - Ranks Extraction Rules
+# Collects storage rank configuration, RAID level, and status data.
+platform: ds
+sourcetype: "ds:rank"
+index: "mainframe_metrics"
+
+extractions:
+  - field: "rank_id"
+    json_path: "$.rank_id"
+  - field: "array_id"
+    json_path: "$.array_id"
+  - field: "rank_name"
+    json_path: "$.rank_name"
+  - field: "rank_type"
+    json_path: "$.rank_type"
+  - field: "status"
+    json_path: "$.status"
+  - field: "capacity_gb"
+    json_path: "$.capacity_gb"
+  - field: "raid_level"
+    json_path: "$.raid_level"
+  - field: "extent_pool_name"
+    json_path: "$.extent_pool_name"
+
+thresholds:
+  - field: "status"
+    operator: "ne"
+    value: "normal"
+    severity: "warning"
+    message_template: "Rank {rank_id} on array {array_id} is not normal (status: {status})"

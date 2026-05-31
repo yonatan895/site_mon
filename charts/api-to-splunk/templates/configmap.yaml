@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "api-to-splunk.fullname" . }}-config
+  labels:
+    {{- include "api-to-splunk.labels" . | nindent 4 }}
+data:
+  PLATFORM: {{ .Values.global.platform | quote }}
+  POLL_INTERVAL_SECONDS: {{ .Values.config.pollIntervalSeconds | quote }}
+  SPLUNK_HEC_URL: {{ .Values.config.hec.url | quote }}
+  SPLUNK_HEC_BATCH_SIZE: {{ .Values.config.hec.batchSize | quote }}
+  SPLUNK_HEC_ACK_ENABLED: {{ .Values.config.hec.ackEnabled | quote }}
+  SPLUNK_HEC_MAX_CONNECTIONS: {{ .Values.config.hec.maxConnections | quote }}
+  SPLUNK_HEC_TIMEOUT: {{ .Values.config.hec.timeout | quote }}
+  SPOOL_MAX_SIZE_MB: {{ .Values.config.spool.maxSizeMb | quote }}
+  SPOOL_DIR: "/spool"
+  RULES_DIR: "/rules"
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  HEALTH_PROBE_INTERVAL: {{ .Values.config.healthProbeInterval | quote }}
+  MAX_CONSECUTIVE_FAILURES: {{ .Values.config.maxConsecutiveFailures | quote }}

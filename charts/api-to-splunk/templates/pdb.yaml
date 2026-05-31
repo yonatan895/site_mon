@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "api-to-splunk.fullname" . }}
+  labels:
+    {{- include "api-to-splunk.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "api-to-splunk.selectorLabels" . | nindent 6 }}

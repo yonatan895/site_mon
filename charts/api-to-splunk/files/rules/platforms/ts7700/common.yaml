@@ -1,0 +1,11 @@
+# TS7700 Platform - Common Fields
+# Shared configuration inherited by all TS7700 data type rules.
+platform: ts7700
+
+common_fields:
+  platform: ts7700
+
+metric_prefix: "ts7700"
+default_sourcetype: "ts7700:metrics"
+default_index: "mainframe_metrics"
+interval_seconds: 300

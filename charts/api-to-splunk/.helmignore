@@ -1,0 +1,12 @@
+.git
+.gitignore
+*.swp
+*.bak
+*.orig
+*.temp
+*.tmp
+\#*
+.\#*
+*.tgz
+*.tar.gz
+OWNERS

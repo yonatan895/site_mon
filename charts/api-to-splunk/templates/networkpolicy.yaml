@@ -1,0 +1,53 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "api-to-splunk.fullname" . }}
+  labels:
+    {{- include "api-to-splunk.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "api-to-splunk.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector: {}
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: UDP
+          port: 53
+    - to:
+        - namespaceSelector: {}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ include "api-to-splunk.name" . }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.targetPort }}
+        - protocol: TCP
+          port: 8081
+    {{- if .Values.networkPolicy.splunkHecEndpoint }}
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app: splunk-hec
+      ports:
+        - protocol: TCP
+          port: 8088
+    {{- end }}
+    {{- range .Values.networkPolicy.apiEndpoints }}
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+    {{- end }}
+{{- end }}

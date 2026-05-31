@@ -1,0 +1,16 @@
+image:
+  registry: "registry.internal.example.com"
+  repository: "ubi9/python-311"
+  tag: "1.0.0-airgap"
+  pullPolicy: "Always"
+
+config:
+  hec:
+    url: "https://splunk-hec.internal.example.com:8088"
+
+networkPolicy:
+  splunkHecEndpoint: "splunk-hec.internal.example.com"
+  apiEndpoints: []
+
+vault:
+  secretStoreRef: "mainframe-vault-store"
