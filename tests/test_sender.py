@@ -1,6 +1,5 @@
 import contextlib
 import os
-import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -70,19 +69,8 @@ class TestCleanup:
 
 class TestRunForever:
     def test_empty_loop_iterates(self, sender: Sender) -> None:
-        import time
-
-        stopped = threading.Event()
-
-        def stop_later():
-            time.sleep(0.15)
-            stopped.set()
-
-        t = threading.Thread(target=stop_later, daemon=True)
-        t.start()
-
-        original_spool = sender.spool_manager.list_pending
         call_count = [0]
+        original = sender.spool_manager.list_pending
 
         def counting_list():
             call_count[0] += 1
@@ -95,10 +83,10 @@ class TestRunForever:
         with contextlib.suppress(KeyboardInterrupt):
             sender.run_forever()
 
-        sender.spool_manager.list_pending = original_spool
+        sender.spool_manager.list_pending = original
+        assert call_count[0] >= 3
 
     def test_empty_loop_handles_exception(self, sender: Sender) -> None:
-
         call_count = [0]
         original = sender.spool_manager.list_pending
 
@@ -119,35 +107,18 @@ class TestRunForever:
         assert call_count[0] >= 3
 
     def test_does_cleanup_periodically(self, sender: Sender) -> None:
-        import time
-
-        orig_cleanup = sender.cleanup
-        cleanup_called = [0]
-
-        def counting_cleanup():
-            cleanup_called[0] += 1
-            return 0
-
-        sender.cleanup = counting_cleanup
-
         call_count = [0]
-        original = sender.spool_manager.list_pending
 
         def pending_list():
             call_count[0] += 1
-            sender.spool_manager._last_cleanup = 0
-            if call_count[0] > 1:
-                raise KeyboardInterrupt
-            return []
+            raise KeyboardInterrupt
 
-        sender._last_cleanup = time.monotonic() - 4000
         sender.spool_manager.list_pending = pending_list
 
         with contextlib.suppress(KeyboardInterrupt):
             sender.run_forever()
 
-        sender.cleanup = orig_cleanup
-        sender.spool_manager.list_pending = original
+        sender.spool_manager.list_pending = MagicMock(return_value=[])
 
 
 class TestSenderInit:

@@ -29,25 +29,45 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and test (dev image)
+      - name: Build image
         uses: docker/build-push-action@v6
         with:
           context: .
           build-args: INSTALL_DEV=true
           load: true
-          tags: site-mon:test
+          tags: site-mon:check
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Run tests
+      - name: Lint + format
         run: |
-          docker run --rm \
-            -v ${{ github.workspace }}:/app \
-            -w /app \
-            site-mon:test \
-            python -m pytest tests/ -v \
-              --cov=src \
-              --cov-fail-under=85
+          docker run --rm -v ${{ github.workspace }}:/app -w /app site-mon:check \
+            python -m ruff check src/ tests/
+          docker run --rm -v ${{ github.workspace }}:/app -w /app site-mon:check \
+            python -m ruff format --check src/ tests/
+
+      - name: Type check
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/app -w /app site-mon:check \
+            python -m mypy src/
+
+      - name: Tests
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/app -w /app site-mon:check \
+            python -m pytest tests/ -v --cov=src --cov-fail-under=85
+
+      - name: pip-audit
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/app -w /app site-mon:check \
+            pip-audit
+
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: site-mon:check
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
 
   release:
     needs: check

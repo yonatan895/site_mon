@@ -55,6 +55,7 @@ serviceAccount:
 
 vault:
   enabled: true
+  secretName: "api-to-splunk-secrets"
   secretStoreRef: "mainframe-vault-store"
   secretPath: "secret/mainframe"
   refreshInterval: "5m"

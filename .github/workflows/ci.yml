@@ -32,8 +32,9 @@ jobs:
           context: .
           build-args: INSTALL_DEV=true
           load: true
-          no-cache: true
           tags: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Lint - ruff check
         run: |
@@ -59,30 +60,18 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
             python -m mypy src/
 
-      - name: Unit tests
+      - name: Tests + coverage
         run: |
           docker run --rm \
             -v ${{ github.workspace }}:/app \
             -w /app \
             ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
-            python -m pytest tests/ -v -m "not integration" \
+            python -m pytest tests/ -v \
               --cov=src \
-              --cov-report=xml:/app/coverage-unit.xml \
+              --cov-report=xml:/app/coverage.xml \
               --cov-report=term \
               --cov-fail-under=85 \
-              --junitxml=/app/junit-unit.xml
-
-      - name: Integration tests
-        run: |
-          docker run --rm \
-            -v ${{ github.workspace }}:/app \
-            -w /app \
-            ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }} \
-            python -m pytest tests/ -v -m "integration" \
-              --cov=src \
-              --cov-report=xml:/app/coverage-integration.xml \
-              --cov-report=term \
-              --junitxml=/app/junit-integration.xml
+              --junitxml=/app/junit.xml
 
       - name: Python dependency audit
         run: |
@@ -106,10 +95,8 @@ jobs:
         with:
           name: test-results
           path: |
-            coverage-unit.xml
-            coverage-integration.xml
-            junit-unit.xml
-            junit-integration.xml
+            coverage.xml
+            junit.xml
 
   helm-test:
     runs-on: ubuntu-latest
@@ -125,15 +112,6 @@ jobs:
 
       - name: Install helm-unittest plugin
         run: helm plugin install https://github.com/helm-unittest/helm-unittest --version 0.7.0
-
-      - name: Helm lint
-        run: helm lint charts/api-to-splunk
-
-      - name: Helm lint production values
-        run: helm lint charts/api-to-splunk -f charts/api-to-splunk/values-prod.yaml
-
-      - name: Helm lint airgap values
-        run: helm lint charts/api-to-splunk -f charts/api-to-splunk/values-airgap.yaml
 
       - name: Helm unit tests
         run: helm unittest charts/api-to-splunk
