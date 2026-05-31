@@ -18,7 +18,17 @@ poller:
 config:
   logLevel: "WARNING"
   hec:
+    url: "https://splunk-hec.internal.example.com:8088"
+    batchSize: 500
     ackEnabled: true
+    maxConnections: 10
+    timeout: 30
+  spool:
+    maxSizeMb: 1024
+
+networkPolicy:
+  enabled: true
+  splunkHecEndpoint: "splunk-hec.internal.example.com"
 
 pvc:
   size: "5Gi"

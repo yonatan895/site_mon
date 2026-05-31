@@ -12,9 +12,12 @@ spec:
     helm:
       valueFiles:
         - values.yaml
+        - values-prod.yaml
       values: |
         global:
           platform: csm
+        vault:
+          secretName: "api-to-splunk-csm-secrets"
         networkPolicy:
           apiEndpoints:
             - csm-main.example.com
