@@ -1,225 +1,175 @@
-"""Endpoint health checking with background probing thread."""
+"""Endpoint health checker with passive failure tracking and active probing."""
 
-import os
 import threading
 import time
-from datetime import UTC, datetime
+from collections import deque
+from typing import Any
 
-import requests
+import structlog
+import urllib3
 
-from .models import HealthStatus, SourceEndpoint
-from .utils import setup_logging
+from .models import SourceEndpoint
+from .utils import configure_logging
 
-logger = setup_logging(__name__)
-
-DEFAULT_HEALTH_CHECK_INTERVAL: int = 60
-DEFAULT_HEALTH_PATH: str | None = None
-DEFAULT_HEALTH_TIMEOUT: int = 10
+configure_logging()
+logger = structlog.get_logger(__name__)
 
 
 class EndpointHealthChecker:
-    """Monitors endpoint health via periodic HTTP probes in a background thread.
+    """Tracks endpoint health via passive failure counting and active HTTP probing.
 
-    Thread-safe status tracking with support for degraded state transitions.
+    Passive tracking: callers report success/failure after each API query.
+    Active probing: a background thread periodically hits each endpoint's
+    health_url (if configured) and updates the health state.
     """
 
     def __init__(
         self,
         endpoints: list[SourceEndpoint],
-        check_interval: int = DEFAULT_HEALTH_CHECK_INTERVAL,
-        health_path: str | None = DEFAULT_HEALTH_PATH,
+        failure_threshold: int = 3,
+        probe_interval: int = 60,
+        probe_timeout: int = 10,
     ) -> None:
-        """Initialize the health checker.
+        self.endpoints = {ep.name: ep for ep in endpoints}
+        self.failure_threshold = failure_threshold
+        self.probe_interval = probe_interval
 
-        Args:
-            endpoints: List of SourceEndpoint objects to monitor.
-            check_interval: Seconds between health check cycles.
-            health_path: URL path to use for health probes, or None to skip.
-        """
-        self.endpoints = endpoints
-        self.check_interval = check_interval
-        self.health_path = health_path
-        self._statuses: dict[str, HealthStatus] = {}
+        # Per-endpoint state
+        self._failures: dict[str, int] = {ep.name: 0 for ep in endpoints}
+        self._healthy: dict[str, bool] = {ep.name: True for ep in endpoints}
+        self._recent_latencies: dict[str, deque] = {
+            ep.name: deque(maxlen=20) for ep in endpoints
+        }
         self._lock = threading.Lock()
-        self._stop_event = threading.Event()
-        self._thread: threading.Thread | None = None
 
-        for ep in endpoints:
-            self._statuses[ep.name] = HealthStatus(endpoint_name=ep.name)
+        self._pool = urllib3.PoolManager(
+            num_pools=len(endpoints) + 1,
+            maxsize=2,
+            timeout=urllib3.Timeout(total=probe_timeout),
+            retries=urllib3.Retry(total=0),
+        )
+        self._stop_event = threading.Event()
+        self._probe_thread: threading.Thread | None = None
 
         logger.info(
             "health_checker_initialized",
-            endpoint_count=len(endpoints),
-            check_interval=check_interval,
+            endpoints=list(self.endpoints.keys()),
+            failure_threshold=failure_threshold,
+            probe_interval=probe_interval,
         )
 
-    def start(self) -> None:
-        """Start the background health probe thread."""
-        if self._thread is not None and self._thread.is_alive():
-            logger.warning("health_checker_already_running")
-            return
+    # ------------------------------------------------------------------
+    # Passive tracking (called by pollers after each query)
+    # ------------------------------------------------------------------
 
-        self._stop_event.clear()
-        self._thread = threading.Thread(target=self._run_loop, name="health-checker", daemon=True)
-        self._thread.start()
-        logger.info("health_checker_started")
-
-    def stop(self) -> None:
-        """Signal the background thread to stop and wait for it to exit."""
-        self._stop_event.set()
-        if self._thread is not None and self._thread.is_alive():
-            self._thread.join(timeout=10)
-        logger.info("health_checker_stopped")
-
-    def _run_loop(self) -> None:
-        """Main health check loop. Runs until stop event is set."""
-        logger.info("health_check_loop_started")
-        while not self._stop_event.is_set():
-            cycle_start = time.monotonic()
-            self._run_checks()
-            elapsed = time.monotonic() - cycle_start
-            sleep_time = max(0, self.check_interval - elapsed)
-            self._stop_event.wait(timeout=sleep_time)
-        logger.info("health_check_loop_stopped")
-
-    def _run_checks(self) -> None:
-        """Execute health probes for all configured endpoints."""
-        for endpoint in self.endpoints:
-            try:
-                health_path = self._get_endpoint_health_path(endpoint)
-                self._probe_endpoint(endpoint, health_path)
-            except Exception:
-                logger.exception("health_probe_unexpected_error", endpoint=endpoint.name)
-
-    def _get_endpoint_health_path(self, endpoint: SourceEndpoint) -> str | None:
-        if endpoint.health_path is not None:
-            return endpoint.health_path if endpoint.health_path else None
-        return self.health_path
-
-    def _probe_endpoint(self, endpoint: SourceEndpoint, health_path: str | None) -> None:
-        """Send a GET request to the endpoint's health path and update status.
-
-        Args:
-            endpoint: The SourceEndpoint to probe.
-            health_path: URL path for health probe, or None to skip probing.
-        """
-        if health_path is None:
-            return
-        url = f"{endpoint.url.rstrip('/')}{health_path}"
-        start_time = time.monotonic()
-        verify_ssl = os.environ.get("VERIFY_SSL", "true").lower() == "true"
-
-        try:
-            response = requests.get(
-                url,
-                timeout=DEFAULT_HEALTH_TIMEOUT,
-                verify=verify_ssl,
-            )
-            elapsed_ms = (time.monotonic() - start_time) * 1000
-
-            is_healthy = 200 <= response.status_code < 300
-
-            with self._lock:
-                status = self._statuses[endpoint.name]
-                status.last_check = datetime.now(UTC)
-                status.response_time_ms = elapsed_ms
-
-                if is_healthy:
-                    if status.consecutive_failures > 0:
-                        logger.info(
-                            "endpoint_recovered",
-                            endpoint=endpoint.name,
-                            previous_failures=status.consecutive_failures,
-                        )
-                    status.is_healthy = True
-                    status.consecutive_failures = 0
-                    status.degraded_since = None
-                else:
-                    self._record_failure(endpoint, status, f"HTTP {response.status_code}")
-
-        except requests.exceptions.Timeout:
-            with self._lock:
-                status = self._statuses[endpoint.name]
-                status.last_check = datetime.now(UTC)
-                status.response_time_ms = (time.monotonic() - start_time) * 1000
-                self._record_failure(endpoint, status, "timeout")
-
-        except requests.exceptions.ConnectionError as e:
-            with self._lock:
-                status = self._statuses[endpoint.name]
-                status.last_check = datetime.now(UTC)
-                status.response_time_ms = None
-                self._record_failure(endpoint, status, f"connection_error: {e}")
-
-        except Exception as e:
-            with self._lock:
-                status = self._statuses[endpoint.name]
-                status.last_check = datetime.now(UTC)
-                status.response_time_ms = None
-                self._record_failure(endpoint, status, f"error: {e}")
-
-    def _record_failure(self, endpoint: SourceEndpoint, status: HealthStatus, reason: str) -> None:
-        """Record a failed health check and transition state if needed.
-
-        Args:
-            endpoint: The endpoint that failed.
-            status: Current HealthStatus to update.
-            reason: Description of the failure.
-        """
-        status.consecutive_failures += 1
-        status.is_healthy = False
-
-        if status.degraded_since is None:
-            status.degraded_since = datetime.now(UTC)
-
-        if status.consecutive_failures >= status.max_consecutive_failures:
-            logger.error(
-                "endpoint_degraded",
-                endpoint=endpoint.name,
-                consecutive_failures=status.consecutive_failures,
-                reason=reason,
-            )
-        else:
-            logger.warning(
-                "health_check_failed",
-                endpoint=endpoint.name,
-                consecutive_failures=status.consecutive_failures,
-                reason=reason,
-            )
-
-    def get_status(self, endpoint_name: str) -> HealthStatus:
-        """Get the current health status for an endpoint.
-
-        Args:
-            endpoint_name: Name of the endpoint.
-
-        Returns:
-            HealthStatus object for the endpoint.
-        """
+    def report_success(self, endpoint_name: str, latency_ms: float = 0.0) -> None:
+        """Record a successful query. Resets failure count; marks endpoint healthy."""
         with self._lock:
-            return self._statuses.get(
-                endpoint_name,
-                HealthStatus(endpoint_name=endpoint_name, is_healthy=False),
-            )
+            self._failures[endpoint_name] = 0
+            self._healthy[endpoint_name] = True
+            if latency_ms:
+                self._recent_latencies[endpoint_name].append(latency_ms)
+
+    def report_failure(self, endpoint_name: str, error: str = "") -> None:
+        """Record a failed query. Marks endpoint unhealthy after threshold breached."""
+        with self._lock:
+            self._failures[endpoint_name] = self._failures.get(endpoint_name, 0) + 1
+            count = self._failures[endpoint_name]
+            if count >= self.failure_threshold:
+                self._healthy[endpoint_name] = False
+                logger.warning(
+                    "endpoint_marked_unhealthy",
+                    endpoint=endpoint_name,
+                    failures=count,
+                    error=error,
+                )
 
     def is_healthy(self, endpoint_name: str) -> bool:
-        """Check if an endpoint is currently healthy.
-
-        Args:
-            endpoint_name: Name of the endpoint.
-
-        Returns:
-            True if the endpoint is healthy.
-        """
         with self._lock:
-            status = self._statuses.get(endpoint_name)
-            return status.is_healthy if status else False
+            return self._healthy.get(endpoint_name, True)
 
-    def get_all_statuses(self) -> dict[str, HealthStatus]:
-        """Get health status for all monitored endpoints.
-
-        Returns:
-            Dictionary mapping endpoint_name -> HealthStatus.
-        """
+    def get_failure_count(self, endpoint_name: str) -> int:
         with self._lock:
-            return dict(self._statuses)
+            return self._failures.get(endpoint_name, 0)
+
+    def get_avg_latency_ms(self, endpoint_name: str) -> float | None:
+        with self._lock:
+            lats = list(self._recent_latencies.get(endpoint_name, []))
+        if not lats:
+            return None
+        return sum(lats) / len(lats)
+
+    def get_all_status(self) -> dict[str, dict[str, Any]]:
+        with self._lock:
+            return {
+                name: {
+                    "healthy": self._healthy.get(name, True),
+                    "failures": self._failures.get(name, 0),
+                    "avg_latency_ms": (
+                        (
+                            sum(self._recent_latencies[name])
+                            / len(self._recent_latencies[name])
+                        )
+                        if self._recent_latencies.get(name)
+                        else None
+                    ),
+                }
+                for name in self.endpoints
+            }
+
+    # ------------------------------------------------------------------
+    # Active probing
+    # ------------------------------------------------------------------
+
+    def start(self) -> None:
+        """Start the background health-probe thread."""
+        self._stop_event.clear()
+        self._probe_thread = threading.Thread(
+            target=self._probe_loop,
+            name="health-probe",
+            daemon=True,
+        )
+        self._probe_thread.start()
+        logger.info("health_probe_thread_started")
+
+    def stop(self) -> None:
+        """Signal the probe thread to stop and wait for it."""
+        self._stop_event.set()
+        if self._probe_thread and self._probe_thread.is_alive():
+            self._probe_thread.join(timeout=5)
+        logger.info("health_probe_thread_stopped")
+
+    def _probe_loop(self) -> None:
+        while not self._stop_event.is_set():
+            for name, endpoint in list(self.endpoints.items()):
+                if not endpoint.health_url:
+                    continue
+                self._probe_endpoint(name, endpoint)
+            self._stop_event.wait(timeout=self.probe_interval)
+
+    def _probe_endpoint(self, name: str, endpoint: SourceEndpoint) -> None:
+        start = time.monotonic()
+        try:
+            resp = self._pool.request("GET", endpoint.health_url)
+            latency_ms = (time.monotonic() - start) * 1000
+            if resp.status < 400:
+                self.report_success(name, latency_ms)
+                logger.debug(
+                    "probe_success",
+                    endpoint=name,
+                    status=resp.status,
+                    latency_ms=round(latency_ms, 1),
+                )
+            else:
+                self.report_failure(
+                    name,
+                    error=f"HTTP {resp.status}",
+                )
+                logger.warning(
+                    "probe_bad_status",
+                    endpoint=name,
+                    status=resp.status,
+                )
+        except Exception as exc:
+            self.report_failure(name, error=str(exc))
+            logger.warning("probe_failed", endpoint=name, error=str(exc))

@@ -218,7 +218,9 @@ class Evaluator:
             try:
                 return bool(OPERATOR_FUNCTIONS[operator_name](field_value, rule.value))
             except TypeError:
-                return bool(OPERATOR_FUNCTIONS[operator_name](str(field_value), rule.value))
+                return bool(
+                    OPERATOR_FUNCTIONS[operator_name](str(field_value), rule.value)
+                )
 
         if operator_name == "contains":
             return str(rule.value).lower() in str(field_value).lower()
