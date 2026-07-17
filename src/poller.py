@@ -86,7 +86,11 @@ class Poller:
             for endpoint in active_endpoints:
                 site_config = self.site_configs.get(endpoint.site)
                 if not site_config:
-                    logger.warning("no_site_config", endpoint=endpoint.name, site=endpoint.site)
+                    logger.warning(
+                        "no_site_config",
+                        endpoint=endpoint.name,
+                        site=endpoint.site,
+                    )
                     continue
 
                 data_types = site_config.data_types or list(self.platform_rules.keys())
@@ -175,7 +179,11 @@ class Poller:
             return None
 
         if raw_data is None:
-            logger.warning("empty_response", endpoint=endpoint.name, data_type=data_type)
+            logger.warning(
+                "empty_response",
+                endpoint=endpoint.name,
+                data_type=data_type,
+            )
             return None
 
         try:
@@ -192,7 +200,11 @@ class Poller:
             )
             return None
 
-    def _events_to_hec_lines(self, events: Any, endpoint: SourceEndpoint) -> list[str]:
+    def _events_to_hec_lines(
+        self,
+        events: Any,
+        endpoint: SourceEndpoint,
+    ) -> list[str]:
         if not events:
             return []
         if not isinstance(events, list):
@@ -208,7 +220,11 @@ class Poller:
             lines.append(json.dumps(hec, default=str, ensure_ascii=False))
         return lines
 
-    def _polling_event_to_hec(self, event: PollingEvent, endpoint: SourceEndpoint) -> dict[str, Any]:
+    def _polling_event_to_hec(
+        self,
+        event: PollingEvent,
+        endpoint: SourceEndpoint,
+    ) -> dict[str, Any]:
         return {
             "time": str(event.timestamp.timestamp()),
             "host": endpoint.name,
@@ -219,7 +235,10 @@ class Poller:
         }
 
     @staticmethod
-    def _dict_to_hec_line(event_dict: dict[str, Any], endpoint: SourceEndpoint) -> dict[str, Any]:
+    def _dict_to_hec_line(
+        event_dict: dict[str, Any],
+        endpoint: SourceEndpoint,
+    ) -> dict[str, Any]:
         return {
             "time": str(datetime.now(UTC).timestamp()),
             "host": endpoint.name,
@@ -229,7 +248,12 @@ class Poller:
             "event": event_dict,
         }
 
-    def _query_endpoint(self, endpoint: SourceEndpoint, data_type: str, platform_rule: PlatformRule) -> Any:
+    def _query_endpoint(
+        self,
+        endpoint: SourceEndpoint,
+        data_type: str,
+        platform_rule: PlatformRule,
+    ) -> Any:
         if endpoint.name not in self._clients:
             self._clients[endpoint.name] = self._create_client(endpoint)
         return self._clients[endpoint.name].query(data_type, platform_rule)
@@ -247,7 +271,11 @@ class Poller:
         raise ValueError(f"Unsupported platform: {endpoint.platform}")
 
     def run_forever(self, interval_seconds: int = 300) -> None:
-        logger.info("poller_loop_started", platform=self.platform, interval_seconds=interval_seconds)
+        logger.info(
+            "poller_loop_started",
+            platform=self.platform,
+            interval_seconds=interval_seconds,
+        )
         self.health_checker.start()
         stop_event = threading.Event()
 
@@ -291,7 +319,8 @@ class BaseAPIClient:
         password = os.environ.get(password_key, "")
         if not password:
             raise RuntimeError(
-                f"Missing required credential: {password_key} for endpoint {self.endpoint.name}"
+                f"Missing required credential: {password_key}"
+                f" for endpoint {self.endpoint.name}"
             )
         return {"username": username, "password": password}
 
@@ -359,7 +388,11 @@ class HMCClient(BaseAPIClient):
                     lpar_data["cpc_name"] = cpc.properties.get("name", "")
                     results.append(lpar_data)
             except Exception as e:
-                self.logger.warning("lpar_query_failed", cpc=cpc.properties.get("name", ""), error=str(e))
+                self.logger.warning(
+                    "lpar_query_failed",
+                    cpc=cpc.properties.get("name", ""),
+                    error=str(e),
+                )
         self.logger.info("hmc_lpars_queried", count=len(results))
         return results
 
@@ -374,7 +407,11 @@ class HMCClient(BaseAPIClient):
                     adapter_data["cpc_name"] = cpc.properties.get("name", "")
                     results.append(adapter_data)
             except Exception as e:
-                self.logger.warning("chpid_query_failed", cpc=cpc.properties.get("name", ""), error=str(e))
+                self.logger.warning(
+                    "chpid_query_failed",
+                    cpc=cpc.properties.get("name", ""),
+                    error=str(e),
+                )
         self.logger.info("hmc_chpids_queried", count=len(results))
         return results
 
@@ -449,7 +486,11 @@ class DS8000Client(BaseAPIClient):
                         }
                     )
             except Exception as e:
-                self.logger.warning("ports_query_failed", system=getattr(system, "id", ""), error=str(e))
+                self.logger.warning(
+                    "ports_query_failed",
+                    system=getattr(system, "id", ""),
+                    error=str(e),
+                )
         self.logger.info("ds8k_ports_queried", count=len(results))
         return results
 
@@ -468,7 +509,11 @@ class DS8000Client(BaseAPIClient):
                         }
                     )
             except Exception as e:
-                self.logger.warning("ranks_query_failed", system=getattr(system, "id", ""), error=str(e))
+                self.logger.warning(
+                    "ranks_query_failed",
+                    system=getattr(system, "id", ""),
+                    error=str(e),
+                )
         self.logger.info("ds8k_ranks_queried", count=len(results))
         return results
 
@@ -488,7 +533,11 @@ class DS8000Client(BaseAPIClient):
                         }
                     )
             except Exception as e:
-                self.logger.warning("replication_query_failed", system=getattr(system, "id", ""), error=str(e))
+                self.logger.warning(
+                    "replication_query_failed",
+                    system=getattr(system, "id", ""),
+                    error=str(e),
+                )
         self.logger.info("ds8k_replication_queried", count=len(results))
         return results
 
@@ -673,7 +722,12 @@ class TS7700Client(BaseAPIClient):
             self.logger.info("ts7700_queried", data_type=data_type, url=url)
             return data
         except requests.exceptions.RequestException as e:
-            self.logger.error("ts7700_query_failed", data_type=data_type, url=url, error=str(e))
+            self.logger.error(
+                "ts7700_query_failed",
+                data_type=data_type,
+                url=url,
+                error=str(e),
+            )
             return []
 
 
