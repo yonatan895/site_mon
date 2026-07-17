@@ -43,7 +43,9 @@ class Poller:
         ensure_dir(spool_dir)
 
         loader = RulesLoader(rules_dir)
-        self.platform_rules, self.site_configs, self.policy = loader.load_full_config(platform)
+        self.platform_rules, self.site_configs, self.policy = loader.load_full_config(
+            platform
+        )
 
         all_endpoints: list[SourceEndpoint] = []
         for site_config in self.site_configs.values():
@@ -191,7 +193,9 @@ class Poller:
             if not site_config:
                 logger.warning("no_site_config_for_evaluation", site=endpoint.site)
                 return None
-            return self.evaluator.evaluate(data_type, raw_data, endpoint.name, site_config)
+            return self.evaluator.evaluate(
+                data_type, raw_data, endpoint.name, site_config
+            )
         except Exception:
             logger.exception(
                 "evaluation_failed",
