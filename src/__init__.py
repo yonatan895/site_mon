@@ -1,43 +1,17 @@
-"""Mainframe infrastructure monitoring pipeline."""
+"""site_mon – IBM Mainframe Site Monitoring.
 
-__version__ = "1.1.0"
+Package entry-point. Exposes only the public interface used by tests
+and the container entry-points; internal sub-modules are imported on
+demand to keep startup cost low.
+"""
 
-from .models import (
-    FieldExtraction,
-    HealthStatus,
-    PlatformRule,
-    PollingEvent,
-    SiteConfig,
-    SourceEndpoint,
-    ThresholdRule,
-)
-from .utils import (
-    atomic_read,
-    atomic_write,
-    calculate_backoff,
-    ensure_dir,
-    format_timestamp,
-    retry_with_backoff,
-    setup_logging,
-    slugify,
-)
+from __future__ import annotations
 
-__all__ = [
-    # Models
-    "SourceEndpoint",
-    "HealthStatus",
-    "FieldExtraction",
-    "ThresholdRule",
-    "PlatformRule",
-    "SiteConfig",
-    "PollingEvent",
-    # Utils
-    "setup_logging",
-    "atomic_write",
-    "atomic_read",
-    "ensure_dir",
-    "format_timestamp",
-    "calculate_backoff",
-    "retry_with_backoff",
-    "slugify",
-]
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__: str = version("site_mon")
+except PackageNotFoundError:  # running from source without install
+    __version__ = "0.0.0.dev0"
+
+__all__ = ["__version__"]

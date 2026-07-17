@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import jmespath
+import structlog
 
 from .models import (
     FieldExtraction,
@@ -14,9 +15,10 @@ from .models import (
     SiteConfig,
     ThresholdRule,
 )
-from .utils import setup_logging
+from .utils import configure_logging
 
-logger = setup_logging(__name__)
+configure_logging()
+logger = structlog.get_logger(__name__)
 
 OPERATOR_FUNCTIONS = {
     "eq": operator.eq,
@@ -39,12 +41,6 @@ class Evaluator:
         platform_rules: dict[str, PlatformRule],
         site_config: SiteConfig | None = None,
     ) -> None:
-        """Initialize the evaluator.
-
-        Args:
-            platform_rules: Dictionary of data_type -> PlatformRule.
-            site_config: Optional site configuration. Can also be passed per evaluate() call.
-        """
         self.platform_rules = platform_rules
         self.site_config = site_config
         logger.info(
@@ -71,7 +67,6 @@ class Evaluator:
         Returns:
             A single PollingEvent or list of PollingEvent objects with alerts.
         """
-        sc = site_config or self.site_config
         sc = site_config or self.site_config
         if not sc:
             raise ValueError("site_config is required for evaluation")
@@ -104,21 +99,8 @@ class Evaluator:
         endpoint_name: str,
         site_config: SiteConfig,
     ) -> PollingEvent:
-        """Evaluate a single raw data item against the platform rule.
-
-        Args:
-            data_type: Data type identifier.
-            raw_item: Single raw response item.
-            rule: PlatformRule to apply.
-            endpoint_name: Source endpoint name.
-            site_config: Site configuration for this evaluation.
-
-        Returns:
-            PollingEvent with extracted fields and any alerts.
-        """
         fields = self._extract_fields(raw_item, rule.extractions)
 
-        # Merge common fields (platform, site, timestamp, etc.)
         common = {
             "platform": site_config.platform,
             "site": site_config.site_name,
@@ -163,15 +145,6 @@ class Evaluator:
     def _extract_fields(
         self, raw_item: dict[str, Any], extractions: list[FieldExtraction]
     ) -> dict[str, Any]:
-        """Apply JMESPath extractions to a single raw data item.
-
-        Args:
-            raw_item: Raw response dictionary.
-            extractions: List of FieldExtraction configurations.
-
-        Returns:
-            Dictionary of extracted field names to their values.
-        """
         fields: dict[str, Any] = {}
         for extraction in extractions:
             try:
@@ -196,7 +169,6 @@ class Evaluator:
                 fields[extraction.field_name] = extraction.default
 
         if not extractions:
-            # Pass through all raw fields
             fields.update(raw_item)
 
         return fields
@@ -204,15 +176,6 @@ class Evaluator:
     def _check_thresholds(
         self, fields: dict[str, Any], thresholds: list[ThresholdRule]
     ) -> list[dict[str, Any]]:
-        """Evaluate all threshold rules against extracted fields.
-
-        Args:
-            fields: Extracted field values.
-            thresholds: List of ThresholdRule configurations.
-
-        Returns:
-            List of alert dictionaries for breached thresholds.
-        """
         alerts: list[dict[str, Any]] = []
         for rule in thresholds:
             try:
@@ -249,22 +212,15 @@ class Evaluator:
         return alerts
 
     def _evaluate_threshold(self, field_value: Any, rule: ThresholdRule) -> bool:
-        """Evaluate a single threshold rule against a field value.
-
-        Args:
-            field_value: The value extracted from the field.
-            rule: The threshold rule to apply.
-
-        Returns:
-            True if the threshold is breached.
-        """
         operator_name = rule.operator
 
         if operator_name in OPERATOR_FUNCTIONS:
             try:
                 return bool(OPERATOR_FUNCTIONS[operator_name](field_value, rule.value))
             except TypeError:
-                return bool(OPERATOR_FUNCTIONS[operator_name](str(field_value), rule.value))
+                return bool(
+                    OPERATOR_FUNCTIONS[operator_name](str(field_value), rule.value)
+                )
 
         if operator_name == "contains":
             return str(rule.value).lower() in str(field_value).lower()
@@ -283,15 +239,6 @@ class Evaluator:
         return False
 
     def _apply_transform(self, value: Any, transform_type: str) -> Any:
-        """Convert a value based on the specified transform type.
-
-        Args:
-            value: The raw value to transform.
-            transform_type: One of "int", "float", "str", "bool".
-
-        Returns:
-            Transformed value.
-        """
         if transform_type == "int":
             return int(value)
         if transform_type == "float":

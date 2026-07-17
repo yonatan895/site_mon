@@ -1,170 +1,207 @@
-"""Rules and configuration loader from YAML files."""
+"""Loads and validates YAML rule files from the rules directory."""
 
+import os
 from pathlib import Path
 from typing import Any
 
+import structlog
 import yaml
 
 from .models import (
     FieldExtraction,
     PlatformRule,
+    SelectionPolicy,
     SiteConfig,
     SourceEndpoint,
     ThresholdRule,
 )
-from .utils import setup_logging
+from .utils import configure_logging
 
-logger = setup_logging(__name__)
+configure_logging()
+logger = structlog.get_logger(__name__)
 
 
 class RulesLoader:
-    """Loads platform rules, site configs, and source policies from YAML files."""
+    """Discovers and parses YAML rule files under a given directory.
 
-    def __init__(self, rules_dir: str = "/rules") -> None:
-        """Initialize the rules loader.
+    Expected layout::
 
-        Args:
-            rules_dir: Base directory containing rules and configuration YAML files.
-        """
+        rules/
+          platform_rules.yaml   # PlatformRule definitions
+          sites/
+            site_a.yaml         # SiteConfig + SourceEndpoint definitions
+            site_b.yaml
+          policy.yaml           # SelectionPolicy (optional)
+    """
+
+    def __init__(self, rules_dir: str) -> None:
         self.rules_dir = Path(rules_dir)
         logger.info("rules_loader_initialized", rules_dir=str(self.rules_dir))
 
-    def _load_yaml(self, filepath: Path) -> dict[str, Any]:
-        """Load and parse a single YAML file.
-
-        Args:
-            filepath: Path to the YAML file.
-
-        Returns:
-            Parsed YAML content as a dictionary. Returns empty dict if file missing.
-        """
-        if not filepath.exists():
-            logger.warning("yaml_file_not_found", path=str(filepath))
-            return {}
-        with open(filepath, encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
-        logger.debug("yaml_loaded", path=str(filepath))
-        return data
-
-    def load_platform_rules(self, platform: str) -> dict[str, PlatformRule]:
-        """Load all data type rule YAML files for a given platform.
-
-        Loads every YAML file from /{rules_dir}/platforms/{platform}/
-        except source-policy.yaml. Merges common.yaml fields into each
-        individual data type rule.
-
-        Args:
-            platform: Platform identifier (e.g. "hmc", "ds8k", "csm", "ts7700").
-
-        Returns:
-            Dictionary mapping data_type -> PlatformRule.
-        """
-        rules_path = self.rules_dir / "platforms" / platform
-        if not rules_path.exists():
-            logger.warning("platform_rules_dir_not_found", path=str(rules_path))
-            return {}
-
-        # Load common fields
-        common_yaml = rules_path / "common.yaml"
-        common_data = self._load_yaml(common_yaml)
-        common_fields = common_data.get("common_fields", {})
-
-        rules: dict[str, PlatformRule] = {}
-        for yaml_file in sorted(rules_path.glob("*.yaml")):
-            if yaml_file.name in ("source-policy.yaml", "common.yaml"):
-                continue
-
-            rule_data = self._load_yaml(yaml_file)
-            if not rule_data:
-                continue
-
-            # Merge common fields into rule (rule-specific fields take precedence)
-            merged_common = {**common_fields, **rule_data.get("common_fields", {})}
-
-            # Parse extractions
-            extractions = [FieldExtraction(**ex) for ex in rule_data.get("extractions", [])]
-
-            # Parse thresholds
-            thresholds = [ThresholdRule(**th) for th in rule_data.get("thresholds", [])]
-
-            rule = PlatformRule(
-                name=rule_data.get("name", yaml_file.stem),
-                data_type=rule_data.get("data_type", yaml_file.stem),
-                sourcetype=rule_data.get("sourcetype", f"{platform}:{yaml_file.stem}"),
-                index=rule_data.get("index", "mainframe_mon"),
-                interval_seconds=rule_data.get("interval_seconds", 300),
-                extractions=extractions,
-                thresholds=thresholds,
-                common_fields=merged_common,
-            )
-            rules[rule.data_type] = rule
-            logger.debug("platform_rule_loaded", data_type=rule.data_type)
-
-        logger.info("platform_rules_loaded", platform=platform, count=len(rules))
-        return rules
-
-    def load_site_configs(self, platform: str) -> dict[str, SiteConfig]:
-        """Load all site configuration YAML files for a given platform.
-
-        Args:
-            platform: Platform identifier.
-
-        Returns:
-            Dictionary mapping site_name -> SiteConfig.
-        """
-        sites_path = self.rules_dir / "sites" / platform
-        if not sites_path.exists():
-            logger.warning("sites_dir_not_found", path=str(sites_path))
-            return {}
-
-        site_configs: dict[str, SiteConfig] = {}
-        for yaml_file in sorted(sites_path.glob("*.yaml")):
-            data = self._load_yaml(yaml_file)
-            if not data:
-                continue
-
-            endpoints = [SourceEndpoint(**ep) for ep in data.get("endpoints", [])]
-
-            config = SiteConfig(
-                site_name=data.get("site_name", yaml_file.stem),
-                platform=data.get("platform", platform),
-                endpoints=endpoints,
-                data_types=data.get("data_types", []),
-                is_primary=data.get("is_primary", True),
-            )
-            site_configs[config.site_name] = config
-            logger.debug("site_config_loaded", site=config.site_name)
-
-        logger.info("site_configs_loaded", platform=platform, count=len(site_configs))
-        return site_configs
-
-    def load_source_policy(self, platform: str) -> dict[str, Any]:
-        """Load the source selection policy for a platform.
-
-        Args:
-            platform: Platform identifier.
-
-        Returns:
-            Policy dictionary with source selection rules.
-        """
-        policy_path = self.rules_dir / "platforms" / platform / "source-policy.yaml"
-        policy = self._load_yaml(policy_path)
-        logger.info("source_policy_loaded", platform=platform)
-        return policy
-
     def load_full_config(
         self, platform: str
-    ) -> tuple[dict[str, PlatformRule], dict[str, SiteConfig], dict[str, Any]]:
-        """Load all configuration for a platform.
-
-        Args:
-            platform: Platform identifier.
+    ) -> tuple[dict[str, PlatformRule], dict[str, SiteConfig], SelectionPolicy]:
+        """Load and return the full configuration for *platform*.
 
         Returns:
-            Tuple of (platform_rules dict, site_configs dict, policy dict).
+            (platform_rules, site_configs, policy)
         """
         platform_rules = self.load_platform_rules(platform)
         site_configs = self.load_site_configs(platform)
-        policy = self.load_source_policy(platform)
-        logger.info("full_config_loaded", platform=platform)
+        policy = self.load_policy()
         return platform_rules, site_configs, policy
+
+    # ------------------------------------------------------------------
+    # Platform rules
+    # ------------------------------------------------------------------
+
+    def load_platform_rules(
+        self, platform: str
+    ) -> dict[str, PlatformRule]:
+        """Load PlatformRule objects for *platform* from platform_rules.yaml."""
+        rules_file = self.rules_dir / "platform_rules.yaml"
+        if not rules_file.exists():
+            logger.warning("platform_rules_file_not_found", path=str(rules_file))
+            return {}
+
+        raw = self._load_yaml(rules_file)
+        platform_data = raw.get(platform, {})
+        if not platform_data:
+            logger.warning(
+                "no_rules_for_platform",
+                platform=platform,
+                available=list(raw.keys()),
+            )
+            return {}
+
+        rules: dict[str, PlatformRule] = {}
+        for data_type, rule_data in platform_data.items():
+            try:
+                rules[data_type] = self._parse_platform_rule(data_type, rule_data)
+            except Exception as e:
+                logger.error(
+                    "rule_parse_error",
+                    platform=platform,
+                    data_type=data_type,
+                    error=str(e),
+                )
+
+        logger.info(
+            "platform_rules_loaded",
+            platform=platform,
+            data_types=list(rules.keys()),
+        )
+        return rules
+
+    def _parse_platform_rule(
+        self, data_type: str, raw: dict[str, Any]
+    ) -> PlatformRule:
+        extractions = [
+            FieldExtraction(
+                field_name=e["field_name"],
+                json_path=e["json_path"],
+                default=e.get("default"),
+                transform=e.get("transform"),
+            )
+            for e in raw.get("extractions", [])
+        ]
+        thresholds = [
+            ThresholdRule(
+                field=t["field"],
+                operator=t["operator"],
+                value=t["value"],
+                severity=t.get("severity", "warning"),
+                message_template=t.get(
+                    "message_template",
+                    "Field {field} value {value} breached threshold {threshold}",
+                ),
+            )
+            for t in raw.get("thresholds", [])
+        ]
+        return PlatformRule(
+            name=raw.get("name", data_type),
+            sourcetype=raw.get("sourcetype", f"{data_type}:generic"),
+            index=raw.get("index", "mainframe_metrics"),
+            extractions=extractions,
+            thresholds=thresholds,
+            common_fields=raw.get("common_fields", {}),
+        )
+
+    # ------------------------------------------------------------------
+    # Site configs
+    # ------------------------------------------------------------------
+
+    def load_site_configs(self, platform: str) -> dict[str, SiteConfig]:
+        """Load SiteConfig objects from the sites/ sub-directory."""
+        sites_dir = self.rules_dir / "sites"
+        if not sites_dir.exists():
+            logger.warning("sites_dir_not_found", path=str(sites_dir))
+            return {}
+
+        site_configs: dict[str, SiteConfig] = {}
+        for yaml_file in sites_dir.glob("*.yaml"):
+            try:
+                raw = self._load_yaml(yaml_file)
+                if raw.get("platform", "").lower() != platform.lower():
+                    continue
+                sc = self._parse_site_config(raw)
+                site_configs[sc.site_name] = sc
+            except Exception as e:
+                logger.error(
+                    "site_config_parse_error", file=str(yaml_file), error=str(e)
+                )
+
+        logger.info(
+            "site_configs_loaded",
+            platform=platform,
+            sites=list(site_configs.keys()),
+        )
+        return site_configs
+
+    def _parse_site_config(self, raw: dict[str, Any]) -> SiteConfig:
+        endpoints = [
+            SourceEndpoint(
+                name=ep["name"],
+                url=ep["url"],
+                platform=raw["platform"],
+                site=raw["site_name"],
+                timeout=ep.get("timeout", 30),
+                health_url=ep.get("health_url"),
+                metadata=ep.get("metadata", {}),
+            )
+            for ep in raw.get("endpoints", [])
+        ]
+        return SiteConfig(
+            site_name=raw["site_name"],
+            platform=raw["platform"],
+            endpoints=endpoints,
+            data_types=raw.get("data_types", []),
+            metadata=raw.get("metadata", {}),
+        )
+
+    # ------------------------------------------------------------------
+    # Selection policy
+    # ------------------------------------------------------------------
+
+    def load_policy(self) -> SelectionPolicy:
+        """Load the optional SelectionPolicy from policy.yaml."""
+        policy_file = self.rules_dir / "policy.yaml"
+        if not policy_file.exists():
+            return SelectionPolicy()
+        try:
+            raw = self._load_yaml(policy_file)
+            policy = SelectionPolicy(**raw.get("policy", {}))
+            logger.info("selection_policy_loaded", strategy=policy.strategy)
+            return policy
+        except Exception as e:
+            logger.warning("policy_load_failed", error=str(e))
+            return SelectionPolicy()
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _load_yaml(self, path: Path) -> dict[str, Any]:
+        env_vars_expanded = os.path.expandvars(path.read_text(encoding="utf-8"))
+        data = yaml.safe_load(env_vars_expanded)
+        return data if isinstance(data, dict) else {}

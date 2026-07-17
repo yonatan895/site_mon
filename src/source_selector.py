@@ -1,30 +1,29 @@
-"""Source endpoint selection based on health status and platform policy."""
+"""Source selector: picks the best endpoint(s) for each polling cycle.
 
-from __future__ import annotations
+Supports three strategies:
+  round_robin   – cycles through healthy endpoints in order
+  primary_only  – always uses the first healthy endpoint
+  weighted      – probabilistic selection based on configured weights
+"""
 
-from typing import TYPE_CHECKING, Any
+import random
+import threading
+from typing import Any
 
-from .models import SiteConfig, SourceEndpoint
-from .utils import setup_logging
+import structlog
 
-if TYPE_CHECKING:
-    from .endpoint_health import EndpointHealthChecker
+from .endpoint_health import EndpointHealthChecker
+from .models import SelectionPolicy, SiteConfig, SourceEndpoint
+from .utils import configure_logging
 
-logger = setup_logging(__name__)
-
-# Platforms that use primary/backup failover pattern
-FAILOVER_PLATFORMS = {"hmc", "ts7700"}
-
-# Platforms where all healthy endpoints are used simultaneously
-MULTI_ENDPOINT_PLATFORMS = {"ds", "csm"}
+configure_logging()
+logger = structlog.get_logger(__name__)
 
 
 class SourceSelector:
-    """Selects active source endpoints based on health and policy rules.
+    """Selects healthy source endpoints according to the configured policy.
 
-    For HMC/TS7700 platforms, only the primary endpoint is used unless unhealthy,
-    in which case the backup takes over. For DS8K/CSM platforms, all healthy
-    endpoints are used simultaneously.
+    Thread-safe: internal counters are protected by a lock.
     """
 
     def __init__(
@@ -32,157 +31,72 @@ class SourceSelector:
         platform: str,
         site_configs: dict[str, SiteConfig],
         health_checker: EndpointHealthChecker,
-        policy: dict[str, Any],
+        policy: SelectionPolicy | None = None,
     ) -> None:
-        """Initialize the source selector.
-
-        Args:
-            platform: Platform identifier.
-            site_configs: Dictionary of site_name -> SiteConfig.
-            health_checker: EndpointHealthChecker instance for health lookups.
-            policy: Source selection policy dictionary.
-        """
         self.platform = platform
         self.site_configs = site_configs
         self.health_checker = health_checker
-        self.policy = policy
+        self.policy = policy or SelectionPolicy()
+        self._lock = threading.Lock()
+        self._rr_index: int = 0
+
+        all_endpoints = [
+            ep
+            for sc in site_configs.values()
+            for ep in sc.endpoints
+            if ep.platform.lower() == platform.lower()
+        ]
+        self._all_endpoints: list[SourceEndpoint] = all_endpoints
+
         logger.info(
             "source_selector_initialized",
             platform=platform,
-            sites=list(site_configs.keys()),
+            strategy=self.policy.strategy,
+            endpoint_count=len(self._all_endpoints),
         )
 
     def get_active_endpoints(self) -> list[SourceEndpoint]:
-        """Determine which endpoints should be polled based on health and policy.
+        """Return the endpoint(s) to use for the next polling cycle.
 
-        Returns:
-            List of SourceEndpoint objects that are currently active.
+        Only healthy endpoints are considered.
         """
-        active: list[SourceEndpoint] = []
-
-        for site_name, site_config in self.site_configs.items():
-            endpoints = site_config.endpoints
-            if not endpoints:
-                logger.warning("no_endpoints_configured", site=site_name)
-                continue
-
-            if self.platform.lower() in FAILOVER_PLATFORMS:
-                selected = self._select_failover(site_name, endpoints)
-            else:
-                selected = self._select_all_healthy(site_name, endpoints)
-
-            active.extend(selected)
-
-        logger.info(
-            "active_endpoints_selected",
-            platform=self.platform,
-            count=len(active),
-            endpoints=[ep.name for ep in active],
-        )
-        return active
-
-    def _select_failover(
-        self, site_name: str, endpoints: list[SourceEndpoint]
-    ) -> list[SourceEndpoint]:
-        """Select primary or backup for failover platforms (HMC, TS7700).
-
-        Args:
-            site_name: Site name for logging.
-            endpoints: List of all configured endpoints for the site.
-
-        Returns:
-            List containing the single active endpoint.
-        """
-        primary_endpoints = [ep for ep in endpoints if _endpoint_is_primary(ep, site_name)]
-        backup_endpoints = [ep for ep in endpoints if not _endpoint_is_primary(ep, site_name)]
-
-        primary = primary_endpoints[0] if primary_endpoints else None
-        backup = backup_endpoints[0] if backup_endpoints else None
-
-        # Check primary health
-        if primary and self.validate_endpoint(primary):
-            logger.debug("using_primary_endpoint", site=site_name, endpoint=primary.name)
-            return [primary]
-
-        if backup and self.validate_endpoint(backup):
-            logger.info("failing_over_to_backup", site=site_name, endpoint=backup.name)
-            return [backup]
-
-        # Neither healthy - return primary as last resort for logging
-        if primary:
-            logger.error("all_endpoints_unhealthy", site=site_name)
-            return [primary]
-
-        logger.error("no_viable_endpoints", site=site_name)
-        return []
-
-    def _select_all_healthy(
-        self, site_name: str, endpoints: list[SourceEndpoint]
-    ) -> list[SourceEndpoint]:
-        """Select all healthy endpoints for multi-endpoint platforms (DS8K, CSM).
-
-        Args:
-            site_name: Site name for logging.
-            endpoints: List of all configured endpoints for the site.
-
-        Returns:
-            List of healthy endpoints.
-        """
-        healthy = [ep for ep in endpoints if self.validate_endpoint(ep)]
-        unhealthy_count = len(endpoints) - len(healthy)
-        if healthy:
-            if unhealthy_count > 0:
-                logger.warning(
-                    "some_endpoints_unhealthy",
-                    site=site_name,
-                    healthy=len(healthy),
-                    unhealthy=unhealthy_count,
-                )
-            return healthy
-
-        logger.warning(
-            "all_endpoints_degraded_falling_back",
-            site=site_name,
-            endpoint_count=len(endpoints),
-        )
-        return endpoints
-
-    def validate_endpoint(self, endpoint: SourceEndpoint) -> bool:
-        """Check if an endpoint passes health criteria.
-
-        Args:
-            endpoint: The SourceEndpoint to validate.
-
-        Returns:
-            True if the endpoint is considered healthy.
-        """
-        is_healthy = self.health_checker.is_healthy(endpoint.name)
-        if not is_healthy:
-            status = self.health_checker.get_status(endpoint.name)
+        healthy = [
+            ep
+            for ep in self._all_endpoints
+            if self.health_checker.is_healthy(ep.name)
+        ]
+        if not healthy:
             logger.warning(
-                "endpoint_unhealthy",
-                endpoint=endpoint.name,
-                consecutive_failures=status.consecutive_failures if status else 0,
+                "no_healthy_endpoints",
+                platform=self.platform,
+                total=len(self._all_endpoints),
             )
-        return is_healthy
+            return []
 
+        strategy = self.policy.strategy
+        if strategy == "primary_only":
+            return [healthy[0]]
+        if strategy == "weighted":
+            return [self._weighted_choice(healthy)]
+        # default: round_robin – return all healthy, ordered from current index
+        return self._round_robin_order(healthy)
 
-def _endpoint_is_primary(endpoint: SourceEndpoint, site_name: str) -> bool:
-    """Determine if an endpoint is the primary for its site.
+    def _round_robin_order(
+        self, healthy: list[SourceEndpoint]
+    ) -> list[SourceEndpoint]:
+        """Return healthy endpoints starting from the current round-robin position."""
+        with self._lock:
+            idx = self._rr_index % len(healthy)
+            self._rr_index = (self._rr_index + 1) % len(healthy)
+        return healthy[idx:] + healthy[:idx]
 
-    Uses the endpoint's role field if set, otherwise falls back
-    to name-based heuristics.
+    def _weighted_choice(self, healthy: list[SourceEndpoint]) -> SourceEndpoint:
+        """Pick one endpoint probabilistically based on configured weights."""
+        weights = [
+            float(self.policy.weights.get(ep.name, 1.0)) for ep in healthy
+        ]
+        return random.choices(healthy, weights=weights, k=1)[0]
 
-    Args:
-        endpoint: The endpoint to check.
-        site_name: Site name for context.
-
-    Returns:
-        True if the endpoint is considered primary.
-    """
-    if endpoint.role is not None:
-        return endpoint.role == "primary"
-    name_lower = endpoint.name.lower()
-    if "primary" in name_lower or "_pri" in name_lower:
-        return True
-    return not ("backup" in name_lower or "dr" in name_lower or "secondary" in name_lower)
+    def get_endpoint_stats(self) -> dict[str, Any]:
+        """Return health + latency stats for all known endpoints."""
+        return self.health_checker.get_all_status()

@@ -1,185 +1,151 @@
-"""Spool watcher: reads NDJSON spool files and sends them to Splunk HEC."""
+"""Sender: drains the spool and delivers NDJSON batches to Splunk HEC.
+
+Runs as a long-lived process (or one-shot via run_once) inside its own
+container.  The spool directory is a shared volume between the poller
+and sender containers.
+
+Delivery guarantee: at-least-once.  Failed batches are nack'd and retried
+up to SpoolManager.MAX_RETRIES times before being moved to dead-letter.
+"""
 
 import os
 import signal
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any
 
+import structlog
 import uvicorn
 
 from .splunk_hec import SplunkHECClient
 from .spool import SpoolManager
-from .utils import ensure_dir, setup_logging
+from .utils import configure_logging
 
-logger = setup_logging(__name__)
-
-DEFAULT_WATCH_INTERVAL = 1.0
-DEFAULT_BATCH_FILES = 50
-DEFAULT_MAX_WORKERS = 5
+configure_logging()
+logger = structlog.get_logger(__name__)
 
 
 class Sender:
-    """Watches the shared spool directory and sends NDJSON payloads to Splunk HEC.
+    """Drains the spool and delivers NDJSON to Splunk HEC.
 
-    Continuously reads pending spool files, sends their raw NDJSON content
-    directly to HEC, and acknowledges or retries based on delivery status.
+    Lifecycle::
+
+        sender = Sender()
+        sender.run_once()      # process all pending files once
+        sender.run_forever()   # loop until SIGTERM / KeyboardInterrupt
     """
 
     def __init__(
         self,
         spool_dir: str = "/spool",
-        hec_url: str | None = None,
-        hec_token: str | None = None,
+        hec_url: str = "",
+        hec_token: str = "",
+        batch_size: int = 500,
+        drain_interval_seconds: int = 5,
     ) -> None:
-        ensure_dir(spool_dir)
+        hec_url = hec_url or os.environ.get("HEC_URL", "")
+        hec_token = hec_token or os.environ.get("HEC_TOKEN", "")
 
-        self.spool_manager = SpoolManager(spool_dir)
+        if not hec_url or not hec_token:
+            raise ValueError(
+                "HEC_URL and HEC_TOKEN must be provided (env or constructor args)"
+            )
 
-        self.hec_url = hec_url or os.environ.get("SPLUNK_HEC_URL", "https://localhost:8088")
-        self.hec_token = hec_token or os.environ.get("SPLUNK_HEC_TOKEN", "")
-
-        self.hec_client = SplunkHECClient(
-            hec_url=self.hec_url,
-            hec_token=self.hec_token,
-            batch_size=int(os.environ.get("SPLUNK_HEC_BATCH_SIZE", "500")),
-            ack_enabled=os.environ.get("SPLUNK_HEC_ACK_ENABLED", "true").lower() == "true",
-            max_connections=int(os.environ.get("SPLUNK_HEC_MAX_CONNECTIONS", "10")),
-            timeout=int(os.environ.get("SPLUNK_HEC_TIMEOUT", "30")),
+        self.drain_interval = drain_interval_seconds
+        self.spool = SpoolManager(spool_dir)
+        self.hec = SplunkHECClient(
+            hec_url=hec_url,
+            hec_token=hec_token,
+            batch_size=batch_size,
         )
 
         logger.info(
             "sender_initialized",
             spool_dir=spool_dir,
-            hec_url=self.hec_url,
+            hec_url=hec_url,
+            batch_size=batch_size,
         )
 
     def run_once(self) -> int:
-        """Execute a single send cycle.
-
-        Reads pending NDJSON files, sends them to HEC in parallel batches,
-        and acknowledges or retries each file.
-
-        Returns:
-            Number of files successfully sent.
-        """
-        cycle_start = time.monotonic()
-        entries = self.spool_manager.read_ndjson_batch(max_files=DEFAULT_BATCH_FILES)
+        """Drain all pending spool files and return the count delivered."""
+        entries = self.spool.read_ndjson_batch()
         if not entries:
             return 0
 
-        logger.info("sender_cycle_start", files=len(entries))
-
-        success_count = 0
-        max_workers = int(os.environ.get("SENDER_MAX_WORKERS", str(DEFAULT_MAX_WORKERS)))
-
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {}
-            for entry in entries:
-                future = executor.submit(self._send_and_ack, entry)
-                futures[future] = entry
-
-            for future in as_completed(futures):
-                entry = futures[future]
-                try:
-                    ok = future.result()
-                    if ok:
-                        success_count += 1
-                except Exception:
-                    logger.exception("send_failed", filename=entry.filename)
-                    self.spool_manager.nack_file(entry.filename, error="send_exception")
-
-        failure_count = len(entries) - success_count
-        try:
-            from .health import batch_send_duration, batch_send_errors
-
-            batch_send_duration.observe(time.monotonic() - cycle_start)
-            if failure_count > 0:
-                batch_send_errors.inc(failure_count)
-        except ImportError:
-            pass
-        logger.info(
-            "sender_cycle_complete",
-            success=success_count,
-            failure=failure_count,
-        )
-        return success_count
-
-    def _send_and_ack(self, entry: Any) -> bool:
-        """Send a single spool entry to HEC and ack/nack accordingly.
-
-        Args:
-            entry: SpoolEntry to deliver.
-
-        Returns:
-            True if delivery was successful.
-        """
-        try:
-            ok = self.hec_client.send_ndjson(entry.content)
+        delivered = 0
+        for entry in entries:
+            ok = self.hec.send_ndjson(entry.content)
             if ok:
-                self.spool_manager.ack_file(entry.filename)
-                return True
+                self.spool.ack_file(entry.filename)
+                delivered += 1
+                logger.info("batch_delivered", filename=entry.filename)
             else:
-                self.spool_manager.nack_file(entry.filename, error="hec_send_returned_false")
-                return False
-        except Exception:
-            logger.exception("send_failed", filename=entry.filename)
-            self.spool_manager.nack_file(entry.filename, error="send_exception")
-        return False
+                self.spool.nack_file(
+                    entry.filename,
+                    error="HEC delivery failed",
+                )
+                logger.warning(
+                    "batch_nacked",
+                    filename=entry.filename,
+                    retry_count=entry.retry_count,
+                )
 
-    def cleanup(self) -> int:
-        return self.spool_manager.cleanup_old_files(max_age_hours=24)
+        logger.info(
+            "drain_cycle_complete",
+            total=len(entries),
+            delivered=delivered,
+            failed=len(entries) - delivered,
+        )
+        return delivered
 
     def run_forever(self) -> None:
-        """Run the sender continuously, watching for new spool files."""
-        logger.info("sender_loop_started", watch_interval=DEFAULT_WATCH_INTERVAL)
-        last_cleanup = time.monotonic()
-
+        """Drain loop: runs until SIGTERM or KeyboardInterrupt."""
+        logger.info("sender_loop_started", drain_interval=self.drain_interval)
         stop_event = threading.Event()
 
-        def _handle_shutdown(signum: int, frame: Any) -> None:
+        def _handle_shutdown(signum: int, _frame: object) -> None:
             logger.info("sender_shutdown_signal", signal=signum)
             stop_event.set()
 
         signal.signal(signal.SIGTERM, _handle_shutdown)
-
         try:
             while not stop_event.is_set():
                 try:
-                    pending = self.spool_manager.list_pending()
-                    if pending:
-                        self.run_once()
-
-                    if time.monotonic() - last_cleanup > 3600:
-                        self.cleanup()
-                        last_cleanup = time.monotonic()
-
+                    self.run_once()
                 except Exception:
-                    logger.exception("sender_cycle_error")
-
-                stop_event.wait(timeout=DEFAULT_WATCH_INTERVAL)
-
+                    logger.exception("drain_cycle_error")
+                stop_event.wait(timeout=self.drain_interval)
         except KeyboardInterrupt:
             logger.info("sender_interrupted")
         finally:
-            self.hec_client.close()
-            logger.info("sender_stopped")
+            self.hec.close()
 
 
 def main() -> None:
+    """Entry point for the sender container."""
     spool_dir = os.environ.get("SPOOL_DIR", "/spool")
-    hec_url = os.environ.get("SPLUNK_HEC_URL", "")
-    hec_token = os.environ.get("SPLUNK_HEC_TOKEN", "")
+    hec_url = os.environ.get("HEC_URL", "")
+    hec_token = os.environ.get("HEC_TOKEN", "")
+    batch_size = int(os.environ.get("HEC_BATCH_SIZE", "500"))
+    drain_interval = int(os.environ.get("DRAIN_INTERVAL_SECONDS", "5"))
 
-    sender = Sender(spool_dir=spool_dir, hec_url=hec_url, hec_token=hec_token)
+    sender = Sender(
+        spool_dir=spool_dir,
+        hec_url=hec_url,
+        hec_token=hec_token,
+        batch_size=batch_size,
+        drain_interval_seconds=drain_interval,
+    )
 
     from .health import app as health_app
     from .health import init_health
+    from .endpoint_health import EndpointHealthChecker
 
-    init_health(spool_manager_instance=sender.spool_manager)
+    init_health(
+        health_checker_instance=EndpointHealthChecker([]),
+        spool_manager_instance=sender.spool,
+    )
 
-    port = int(os.environ.get("HEALTH_PORT", "8081"))
+    port = int(os.environ.get("HEALTH_PORT", "8080"))
     server_thread = threading.Thread(
         target=uvicorn.run,
         args=(health_app,),
@@ -187,7 +153,6 @@ def main() -> None:
         daemon=True,
     )
     server_thread.start()
-
     sender.run_forever()
 
 
