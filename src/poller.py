@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from typing import Any
 
+import requests
 import structlog
 import uvicorn
 
@@ -36,13 +37,6 @@ class Poller:
         rules_dir: str = "/rules",
         spool_dir: str = "/spool",
     ) -> None:
-        """Initialize the Poller.
-
-        Args:
-            platform: Platform identifier (hmc, ds8k, csm, ts7700).
-            rules_dir: Base directory for rules configuration.
-            spool_dir: Shared PVC spool directory.
-        """
         self.platform = platform
 
         ensure_dir(rules_dir)
@@ -74,14 +68,7 @@ class Poller:
         )
 
     def run_once(self) -> int:
-        """Execute a single polling cycle.
-
-        Retrieves active endpoints, queries all configured data types in parallel,
-        evaluates results, serializes to HEC NDJSON format, and writes to spool.
-
-        Returns:
-            Number of HEC event lines written.
-        """
+        """Execute a single polling cycle."""
         cycle_start = time.monotonic()
         batch_id = str(uuid.uuid4())
 
@@ -177,7 +164,6 @@ class Poller:
         data_type: str,
         platform_rule: PlatformRule,
     ) -> Any | None:
-        """Query an endpoint for a specific data type and evaluate results."""
         try:
             raw_data = self._query_endpoint(endpoint, data_type, platform_rule)
         except Exception:
@@ -189,11 +175,7 @@ class Poller:
             return None
 
         if raw_data is None:
-            logger.warning(
-                "empty_response",
-                endpoint=endpoint.name,
-                data_type=data_type,
-            )
+            logger.warning("empty_response", endpoint=endpoint.name, data_type=data_type)
             return None
 
         try:
@@ -201,9 +183,7 @@ class Poller:
             if not site_config:
                 logger.warning("no_site_config_for_evaluation", site=endpoint.site)
                 return None
-
-            result = self.evaluator.evaluate(data_type, raw_data, endpoint.name, site_config)
-            return result
+            return self.evaluator.evaluate(data_type, raw_data, endpoint.name, site_config)
         except Exception:
             logger.exception(
                 "evaluation_failed",
@@ -212,18 +192,11 @@ class Poller:
             )
             return None
 
-    def _events_to_hec_lines(
-        self,
-        events: Any,
-        endpoint: SourceEndpoint,
-    ) -> list[str]:
-        """Convert polling events to HEC NDJSON lines."""
+    def _events_to_hec_lines(self, events: Any, endpoint: SourceEndpoint) -> list[str]:
         if not events:
             return []
-
         if not isinstance(events, list):
             events = [events]
-
         lines: list[str] = []
         for event in events:
             if isinstance(event, PollingEvent):
@@ -233,15 +206,9 @@ class Poller:
             else:
                 continue
             lines.append(json.dumps(hec, default=str, ensure_ascii=False))
-
         return lines
 
-    def _polling_event_to_hec(
-        self,
-        event: PollingEvent,
-        endpoint: SourceEndpoint,
-    ) -> dict[str, Any]:
-        """Convert a PollingEvent to a Splunk HEC event dict."""
+    def _polling_event_to_hec(self, event: PollingEvent, endpoint: SourceEndpoint) -> dict[str, Any]:
         return {
             "time": str(event.timestamp.timestamp()),
             "host": endpoint.name,
@@ -252,11 +219,7 @@ class Poller:
         }
 
     @staticmethod
-    def _dict_to_hec_line(
-        event_dict: dict[str, Any],
-        endpoint: SourceEndpoint,
-    ) -> dict[str, Any]:
-        """Convert a raw dict to a Splunk HEC event dict."""
+    def _dict_to_hec_line(event_dict: dict[str, Any], endpoint: SourceEndpoint) -> dict[str, Any]:
         return {
             "time": str(datetime.now(UTC).timestamp()),
             "host": endpoint.name,
@@ -266,48 +229,26 @@ class Poller:
             "event": event_dict,
         }
 
-    def _query_endpoint(
-        self,
-        endpoint: SourceEndpoint,
-        data_type: str,
-        platform_rule: PlatformRule,
-    ) -> Any:
-        """Query an API endpoint for the specified data type."""
+    def _query_endpoint(self, endpoint: SourceEndpoint, data_type: str, platform_rule: PlatformRule) -> Any:
         if endpoint.name not in self._clients:
             self._clients[endpoint.name] = self._create_client(endpoint)
         return self._clients[endpoint.name].query(data_type, platform_rule)
 
     def _create_client(self, endpoint: SourceEndpoint) -> Any:
-        """Factory method to create the appropriate API client for the platform.
-
-        Raises:
-            ValueError: If the platform is unsupported.
-        """
         platform_lower = endpoint.platform.lower()
-
         if platform_lower == "hmc":
             return HMCClient(endpoint)
-
         if platform_lower in ("ds", "ds8k", "ds8000"):
             return DS8000Client(endpoint)
-
         if platform_lower == "csm":
             return CSMClient(endpoint)
-
         if platform_lower == "ts7700":
             return TS7700Client(endpoint)
-
         raise ValueError(f"Unsupported platform: {endpoint.platform}")
 
     def run_forever(self, interval_seconds: int = 300) -> None:
-        """Run polling continuously at the specified interval."""
-        logger.info(
-            "poller_loop_started",
-            platform=self.platform,
-            interval_seconds=interval_seconds,
-        )
+        logger.info("poller_loop_started", platform=self.platform, interval_seconds=interval_seconds)
         self.health_checker.start()
-
         stop_event = threading.Event()
 
         def _handle_shutdown(signum: int, frame: Any) -> None:
@@ -315,22 +256,15 @@ class Poller:
             stop_event.set()
 
         signal.signal(signal.SIGTERM, _handle_shutdown)
-
         try:
             while not stop_event.is_set():
                 cycle_start = time.monotonic()
                 try:
                     self.run_once()
                 except Exception:
-                    logger.exception(
-                        "polling_cycle_error",
-                        platform=self.platform,
-                    )
-
+                    logger.exception("polling_cycle_error", platform=self.platform)
                 elapsed = time.monotonic() - cycle_start
-                sleep_time = max(0, interval_seconds - elapsed)
-                logger.debug("polling_sleep", seconds=sleep_time)
-                stop_event.wait(timeout=sleep_time)
+                stop_event.wait(timeout=max(0, interval_seconds - elapsed))
         except KeyboardInterrupt:
             logger.info("poller_interrupted")
         finally:
@@ -343,28 +277,16 @@ class BaseAPIClient:
     def __init__(self, endpoint: SourceEndpoint) -> None:
         self.endpoint = endpoint
         self.logger = structlog.get_logger(__name__)
-        # FIX #1: Per-client lock to guard lazy _connect() against race conditions
         self._connect_lock = threading.Lock()
 
     def query(self, data_type: str, platform_rule: PlatformRule) -> Any:
-        """Query the API for a specific data type.
-
-        Raises:
-            NotImplementedError: Subclasses must implement this.
-        """
         raise NotImplementedError
 
     def _load_creds(self) -> dict[str, str]:
-        """Load credentials from environment variables.
-
-        Raises:
-            RuntimeError: If password environment variable is empty.
-        """
         platform = self.endpoint.platform.upper()
         site = self.endpoint.site.upper()
         username_key = f"{platform}_{site}_USERNAME"
         password_key = f"{platform}_{site}_PASSWORD"
-
         username = os.environ.get(username_key, "admin")
         password = os.environ.get(password_key, "")
         if not password:
@@ -375,19 +297,13 @@ class BaseAPIClient:
 
 
 class HMCClient(BaseAPIClient):
-    """Client for IBM Z HMC (Hardware Management Console) via zhmcclient."""
+    """Client for IBM Z HMC via zhmcclient."""
 
     def __init__(self, endpoint: SourceEndpoint) -> None:
         super().__init__(endpoint)
         self._client = None
 
     def _connect(self) -> Any:
-        """Establish connection to the HMC. Thread-safe via _connect_lock.
-
-        Returns:
-            zhmcclient.Client instance.
-        """
-        # FIX #1: double-checked locking pattern
         if self._client is not None:
             return self._client
         with self._connect_lock:
@@ -409,12 +325,10 @@ class HMCClient(BaseAPIClient):
         return self._client
 
     def query(self, data_type: str, platform_rule: PlatformRule) -> Any:
-        """Query HMC for CPC stats, CPUs, LPARs, CHPIDs, networking, or channels."""
         import zhmcclient
 
         session = self._connect()
         client = zhmcclient.Client(session)
-
         if data_type in ("cpc-stats", "cpus"):
             return self._query_cpcs(client)
         elif data_type == "lpars":
@@ -445,9 +359,7 @@ class HMCClient(BaseAPIClient):
                     lpar_data["cpc_name"] = cpc.properties.get("name", "")
                     results.append(lpar_data)
             except Exception as e:
-                self.logger.warning(
-                    "lpar_query_failed", cpc=cpc.properties.get("name", ""), error=str(e)
-                )
+                self.logger.warning("lpar_query_failed", cpc=cpc.properties.get("name", ""), error=str(e))
         self.logger.info("hmc_lpars_queried", count=len(results))
         return results
 
@@ -462,9 +374,7 @@ class HMCClient(BaseAPIClient):
                     adapter_data["cpc_name"] = cpc.properties.get("name", "")
                     results.append(adapter_data)
             except Exception as e:
-                self.logger.warning(
-                    "chpid_query_failed", cpc=cpc.properties.get("name", ""), error=str(e)
-                )
+                self.logger.warning("chpid_query_failed", cpc=cpc.properties.get("name", ""), error=str(e))
         self.logger.info("hmc_chpids_queried", count=len(results))
         return results
 
@@ -477,14 +387,6 @@ class DS8000Client(BaseAPIClient):
         self._connection = None
 
     def _connect(self) -> Any:
-        """Establish connection to the DS8000. Thread-safe via _connect_lock.
-
-        Returns:
-            pyds8k D8KClient instance.
-        """
-        # FIX #1 + FIX #2: thread-safe connect with corrected pyds8k import path.
-        # pyds8k public API is at pyds8k.client.ds8k.client.D8KClient, not
-        # pyds8k.client.DS8KClient which does not exist.
         if self._connection is not None:
             return self._connection
         with self._connect_lock:
@@ -503,9 +405,7 @@ class DS8000Client(BaseAPIClient):
         return self._connection
 
     def query(self, data_type: str, platform_rule: PlatformRule) -> Any:
-        """Query DS8000 for arrays, ports, ranks, or replication."""
         conn = self._connect()
-
         if data_type == "arrays":
             return self._query_arrays(conn)
         elif data_type == "ports":
@@ -520,17 +420,16 @@ class DS8000Client(BaseAPIClient):
 
     def _query_arrays(self, conn: Any) -> list[dict[str, Any]]:
         arrays = conn.get_systems()
-        results = []
-        for arr in arrays:
-            results.append(
-                {
-                    "id": getattr(arr, "id", ""),
-                    "name": getattr(arr, "name", ""),
-                    "state": getattr(arr, "state", ""),
-                    "capacity": getattr(arr, "capacity", ""),
-                    "firmware_version": getattr(arr, "bundle_version", ""),
-                }
-            )
+        results = [
+            {
+                "id": getattr(arr, "id", ""),
+                "name": getattr(arr, "name", ""),
+                "state": getattr(arr, "state", ""),
+                "capacity": getattr(arr, "capacity", ""),
+                "firmware_version": getattr(arr, "bundle_version", ""),
+            }
+            for arr in arrays
+        ]
         self.logger.info("ds8k_arrays_queried", count=len(results))
         return results
 
@@ -538,8 +437,7 @@ class DS8000Client(BaseAPIClient):
         results = []
         for system in conn.get_systems():
             try:
-                ports = conn.get_ioports(system.id)
-                for port in ports:
+                for port in conn.get_ioports(system.id):
                     results.append(
                         {
                             "system_id": system.id,
@@ -551,9 +449,7 @@ class DS8000Client(BaseAPIClient):
                         }
                     )
             except Exception as e:
-                self.logger.warning(
-                    "ports_query_failed", system=getattr(system, "id", ""), error=str(e)
-                )
+                self.logger.warning("ports_query_failed", system=getattr(system, "id", ""), error=str(e))
         self.logger.info("ds8k_ports_queried", count=len(results))
         return results
 
@@ -561,8 +457,7 @@ class DS8000Client(BaseAPIClient):
         results = []
         for system in conn.get_systems():
             try:
-                ranks = conn.get_ranks(system.id)
-                for rank in ranks:
+                for rank in conn.get_ranks(system.id):
                     results.append(
                         {
                             "system_id": system.id,
@@ -573,9 +468,7 @@ class DS8000Client(BaseAPIClient):
                         }
                     )
             except Exception as e:
-                self.logger.warning(
-                    "ranks_query_failed", system=getattr(system, "id", ""), error=str(e)
-                )
+                self.logger.warning("ranks_query_failed", system=getattr(system, "id", ""), error=str(e))
         self.logger.info("ds8k_ranks_queried", count=len(results))
         return results
 
@@ -583,8 +476,7 @@ class DS8000Client(BaseAPIClient):
         results = []
         for system in conn.get_systems():
             try:
-                pairs = conn.get_copy_services(system.id)
-                for pair in pairs:
+                for pair in conn.get_copy_services(system.id):
                     results.append(
                         {
                             "system_id": system.id,
@@ -596,9 +488,7 @@ class DS8000Client(BaseAPIClient):
                         }
                     )
             except Exception as e:
-                self.logger.warning(
-                    "replication_query_failed", system=getattr(system, "id", ""), error=str(e)
-                )
+                self.logger.warning("replication_query_failed", system=getattr(system, "id", ""), error=str(e))
         self.logger.info("ds8k_replication_queried", count=len(results))
         return results
 
@@ -606,38 +496,32 @@ class DS8000Client(BaseAPIClient):
 class CSMClient(BaseAPIClient):
     """Client for IBM Copy Services Manager via its REST API.
 
-    FIX #3: The previously used 'pycsm' package does not exist on PyPI.
     IBM CSM exposes a REST API documented in IBM SC27-9229. This client
-    uses requests directly against that REST API.
+    uses the top-level `requests` import (already present in this module)
+    against that REST API. The previously used 'pycsm' package does not
+    exist on PyPI.
 
     Base URL pattern: https://<csm-host>:<port>/CSM/web/
-    Authentication: HTTP Basic or session token (we use Basic here).
     """
 
-    # IBM CSM REST API paths (SC27-9229)
     _SESSIONS_PATH = "/CSM/web/sessions"
     _POLICIES_PATH = "/CSM/web/storagedevices"
     _REPLICATION_PATH = "/CSM/web/sessions/copysets"
 
     def __init__(self, endpoint: SourceEndpoint) -> None:
         super().__init__(endpoint)
-        self._session = None
+        self._session: requests.Session | None = None
 
-    def _connect(self) -> Any:
+    def _connect(self) -> requests.Session:
         """Create a requests.Session authenticated to the CSM REST API.
 
         Thread-safe via _connect_lock.
-
-        Returns:
-            requests.Session configured with auth and headers.
         """
         if self._session is not None:
             return self._session
         with self._connect_lock:
             if self._session is not None:
                 return self._session
-            import requests
-
             creds = self._load_creds()
             session = requests.Session()
             session.auth = (creds["username"], creds["password"])
@@ -653,19 +537,7 @@ class CSMClient(BaseAPIClient):
         return self._session
 
     def _get(self, path: str) -> Any:
-        """Perform a GET against the CSM REST API.
-
-        Args:
-            path: API path (e.g. '/CSM/web/sessions').
-
-        Returns:
-            Parsed JSON response body.
-
-        Raises:
-            requests.HTTPError: On non-2xx response.
-        """
-        import requests
-
+        """Perform a GET against the CSM REST API."""
         session = self._connect()
         url = f"{self.endpoint.url.rstrip('/')}{path}"
         response = session.get(url, timeout=self.endpoint.timeout)
@@ -673,15 +545,6 @@ class CSMClient(BaseAPIClient):
         return response.json()
 
     def query(self, data_type: str, platform_rule: PlatformRule) -> Any:
-        """Query CSM for sessions, policies, or replication copysets.
-
-        Args:
-            data_type: One of 'sessions', 'policies', 'replication'.
-            platform_rule: PlatformRule configuration.
-
-        Returns:
-            List of dicts with CSM data.
-        """
         if data_type == "sessions":
             return self._query_sessions()
         elif data_type == "policies":
@@ -693,7 +556,6 @@ class CSMClient(BaseAPIClient):
             return []
 
     def _query_sessions(self) -> list[dict[str, Any]]:
-        """Query CSM sessions via GET /CSM/web/sessions."""
         try:
             data = self._get(self._SESSIONS_PATH)
             sessions = data if isinstance(data, list) else data.get("sessions", [])
@@ -715,7 +577,6 @@ class CSMClient(BaseAPIClient):
             return []
 
     def _query_policies(self) -> list[dict[str, Any]]:
-        """Query CSM storage devices (policy targets) via GET /CSM/web/storagedevices."""
         try:
             data = self._get(self._POLICIES_PATH)
             devices = data if isinstance(data, list) else data.get("storagedevices", [])
@@ -736,7 +597,6 @@ class CSMClient(BaseAPIClient):
             return []
 
     def _query_replication(self) -> list[dict[str, Any]]:
-        """Query CSM replication copysets via GET /CSM/web/sessions/copysets."""
         try:
             data = self._get(self._REPLICATION_PATH)
             copysets = data if isinstance(data, list) else data.get("copysets", [])
@@ -761,37 +621,30 @@ class CSMClient(BaseAPIClient):
 class TS7700Client(BaseAPIClient):
     """Client for IBM TS7700 tape virtualization via REST API.
 
-    API paths are per IBM TS7700 Virtualization Engine REST API Reference
+    API paths per IBM TS7700 Virtualization Engine REST API Reference
     (SC27-9158). Tested against TS7700 firmware R4.2+.
     """
 
-    # FIX #7: Paths verified against IBM SC27-9158 TS7700 REST API Reference.
+    # Paths verified against IBM SC27-9158.
     # /api/v1.0/ prefix; 'drives' resource is 'libraries' in the IBM schema.
     _ENDPOINTS_MAP = {
         "cluster": "/api/v1.0/cluster",
         "cache": "/api/v1.0/cache",
-        "drives": "/api/v1.0/libraries",       # IBM SC27-9158 §4.3: library resources
+        "drives": "/api/v1.0/libraries",
         "replication": "/api/v1.0/replication",
     }
 
     def __init__(self, endpoint: SourceEndpoint) -> None:
         super().__init__(endpoint)
-        self._session: Any | None = None
+        self._session: requests.Session | None = None
 
-    def _get_session(self) -> Any:
-        """Get or create a requests session with auth. Thread-safe via _connect_lock.
-
-        Returns:
-            requests.Session with auth configured.
-        """
-        # FIX #1: thread-safe lazy session creation
+    def _get_session(self) -> requests.Session:
+        """Get or create a requests session with auth. Thread-safe via _connect_lock."""
         if self._session is not None:
             return self._session
         with self._connect_lock:
             if self._session is not None:
                 return self._session
-            import requests
-
             creds = self._load_creds()
             session = requests.Session()
             session.auth = (creds["username"], creds["password"])
@@ -807,29 +660,14 @@ class TS7700Client(BaseAPIClient):
         return self._session
 
     def query(self, data_type: str, platform_rule: PlatformRule) -> Any:
-        """Query TS7700 for cluster info, cache, drives (libraries), or replication.
-
-        Args:
-            data_type: One of 'cluster', 'cache', 'drives', 'replication'.
-            platform_rule: PlatformRule configuration.
-
-        Returns:
-            Structured dict or list of dicts.
-        """
-        import requests
-
         session = self._get_session()
-        timeout = self.endpoint.timeout
-
         path = self._ENDPOINTS_MAP.get(data_type)
         if not path:
             self.logger.warning("unknown_ts7700_data_type", data_type=data_type)
             return []
-
         url = f"{self.endpoint.url.rstrip('/')}{path}"
-
         try:
-            response = session.get(url, timeout=timeout)
+            response = session.get(url, timeout=self.endpoint.timeout)
             response.raise_for_status()
             data = response.json()
             self.logger.info("ts7700_queried", data_type=data_type, url=url)
@@ -864,7 +702,6 @@ def main() -> None:
         daemon=True,
     )
     server_thread.start()
-
     poller.run_forever(interval_seconds=interval)
 
 

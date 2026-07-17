@@ -16,6 +16,7 @@ import time
 import uuid
 from urllib.parse import urljoin
 
+import structlog
 import urllib3
 from tenacity import (
     before_sleep_log,
@@ -28,8 +29,6 @@ from tenacity import (
 from .utils import configure_logging
 
 configure_logging()
-import structlog
-
 logger = structlog.get_logger(__name__)
 
 HEC_EVENT_PATH = "/services/collector/event"
@@ -114,7 +113,6 @@ class SplunkHECClient:
             ack_id = self._post_with_retry(ndjson_content)
             logger.info("ndjson_sent", lines=line_count, ack_id=ack_id)
 
-            # FIX #4: Poll ACK endpoint to confirm indexer has written the batch.
             if self.ack_enabled and ack_id is not None:
                 confirmed = self._poll_ack(ack_id)
                 if not confirmed:

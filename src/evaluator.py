@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import jmespath
+import structlog
 
 from .models import (
     FieldExtraction,
@@ -17,8 +18,6 @@ from .models import (
 from .utils import configure_logging
 
 configure_logging()
-import structlog
-
 logger = structlog.get_logger(__name__)
 
 OPERATOR_FUNCTIONS = {
@@ -68,7 +67,6 @@ class Evaluator:
         Returns:
             A single PollingEvent or list of PollingEvent objects with alerts.
         """
-        # FIX #5: removed duplicate assignment of sc
         sc = site_config or self.site_config
         if not sc:
             raise ValueError("site_config is required for evaluation")

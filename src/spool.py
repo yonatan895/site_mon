@@ -8,11 +8,11 @@ import uuid
 from pathlib import Path
 from typing import NamedTuple
 
+import structlog
+
 from .utils import configure_logging
 
 configure_logging()
-import structlog
-
 logger = structlog.get_logger(__name__)
 
 NDJSON_EXTENSION = ".ndjson"
@@ -61,7 +61,7 @@ class SpoolManager:
     Retry count is embedded in the filename, avoiding any need to
     deserialize file content for tracking.
 
-    FIX #7: Spool size is maintained as an in-memory counter updated on
+    Spool size is maintained as an in-memory counter updated on
     every write and delete, avoiding an O(n) directory scan on every write.
     The counter is reconciled from disk on __init__ and after cleanup.
     """
@@ -82,7 +82,7 @@ class SpoolManager:
         ensure_dir(str(self.dead_letter_dir))
         self._lock = threading.Lock()
 
-        # FIX #7: in-memory size counter — seed from disk on startup
+        # In-memory size counter — seed from disk on startup
         self._current_size_bytes: int = self._scan_spool_size()
 
         self.reclaim_stale_processing()
@@ -112,7 +112,6 @@ class SpoolManager:
         if not content.strip():
             raise ValueError("Cannot write empty NDJSON content")
 
-        # FIX #7: O(1) in-memory check instead of O(n) directory scan
         with self._lock:
             if self._current_size_bytes >= self.max_spool_size_bytes:
                 raise SpoolFullError(
