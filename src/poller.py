@@ -19,9 +19,10 @@ from .models import PlatformRule, PollingEvent, SourceEndpoint
 from .rules_loader import RulesLoader
 from .source_selector import SourceSelector
 from .spool import SpoolManager
-from .utils import ensure_dir, setup_logging
+from .utils import configure_logging, ensure_dir
 
-logger = setup_logging(__name__)
+configure_logging()
+logger = structlog.get_logger(__name__)
 
 
 class Poller:
@@ -47,11 +48,9 @@ class Poller:
         ensure_dir(rules_dir)
         ensure_dir(spool_dir)
 
-        # Load configuration
         loader = RulesLoader(rules_dir)
         self.platform_rules, self.site_configs, self.policy = loader.load_full_config(platform)
 
-        # Initialize health checker with all endpoints
         all_endpoints: list[SourceEndpoint] = []
         for site_config in self.site_configs.values():
             all_endpoints.extend(site_config.endpoints)
@@ -178,16 +177,7 @@ class Poller:
         data_type: str,
         platform_rule: PlatformRule,
     ) -> Any | None:
-        """Query an endpoint for a specific data type and evaluate results.
-
-        Args:
-            endpoint: The source endpoint to query.
-            data_type: The data type to retrieve.
-            platform_rule: The PlatformRule for this data type.
-
-        Returns:
-            PollingEvent or list of PollingEvent, or None on failure.
-        """
+        """Query an endpoint for a specific data type and evaluate results."""
         try:
             raw_data = self._query_endpoint(endpoint, data_type, platform_rule)
         except Exception:
@@ -227,18 +217,7 @@ class Poller:
         events: Any,
         endpoint: SourceEndpoint,
     ) -> list[str]:
-        """Convert polling events to HEC NDJSON lines.
-
-        Each line is a JSON object in Splunk HEC event format:
-        {"time": ..., "host": ..., "source": ..., "sourcetype": ..., "index": ..., "event": {...}}
-
-        Args:
-            events: Single PollingEvent or list of PollingEvent.
-            endpoint: Source endpoint for host/source metadata.
-
-        Returns:
-            List of HEC JSON strings (one per event).
-        """
+        """Convert polling events to HEC NDJSON lines."""
         if not events:
             return []
 
@@ -293,28 +272,13 @@ class Poller:
         data_type: str,
         platform_rule: PlatformRule,
     ) -> Any:
-        """Query an API endpoint for the specified data type.
-
-        Args:
-            endpoint: SourceEndpoint configuration.
-            data_type: Data type to query.
-            platform_rule: PlatformRule for this data type.
-
-        Returns:
-            Raw response data as dict or list of dicts.
-        """
+        """Query an API endpoint for the specified data type."""
         if endpoint.name not in self._clients:
             self._clients[endpoint.name] = self._create_client(endpoint)
         return self._clients[endpoint.name].query(data_type, platform_rule)
 
     def _create_client(self, endpoint: SourceEndpoint) -> Any:
         """Factory method to create the appropriate API client for the platform.
-
-        Args:
-            endpoint: SourceEndpoint configuration.
-
-        Returns:
-            Platform-specific API client instance.
 
         Raises:
             ValueError: If the platform is unsupported.
@@ -336,11 +300,7 @@ class Poller:
         raise ValueError(f"Unsupported platform: {endpoint.platform}")
 
     def run_forever(self, interval_seconds: int = 300) -> None:
-        """Run polling continuously at the specified interval.
-
-        Args:
-            interval_seconds: Seconds between polling cycles.
-        """
+        """Run polling continuously at the specified interval."""
         logger.info(
             "poller_loop_started",
             platform=self.platform,
@@ -383,16 +343,11 @@ class BaseAPIClient:
     def __init__(self, endpoint: SourceEndpoint) -> None:
         self.endpoint = endpoint
         self.logger = structlog.get_logger(__name__)
+        # FIX #1: Per-client lock to guard lazy _connect() against race conditions
+        self._connect_lock = threading.Lock()
 
     def query(self, data_type: str, platform_rule: PlatformRule) -> Any:
         """Query the API for a specific data type.
-
-        Args:
-            data_type: The data type to query.
-            platform_rule: The PlatformRule configuration.
-
-        Returns:
-            Raw response data.
 
         Raises:
             NotImplementedError: Subclasses must implement this.
@@ -400,10 +355,7 @@ class BaseAPIClient:
         raise NotImplementedError
 
     def _load_creds(self) -> dict[str, str]:
-        """Load credentials from vault or config.
-
-        Returns:
-            Dictionary with username and password.
+        """Load credentials from environment variables.
 
         Raises:
             RuntimeError: If password environment variable is empty.
@@ -430,40 +382,34 @@ class HMCClient(BaseAPIClient):
         self._client = None
 
     def _connect(self) -> Any:
-        """Establish connection to the HMC.
+        """Establish connection to the HMC. Thread-safe via _connect_lock.
 
         Returns:
-            zhmcclient session object.
+            zhmcclient.Client instance.
         """
+        # FIX #1: double-checked locking pattern
         if self._client is not None:
             return self._client
+        with self._connect_lock:
+            if self._client is not None:
+                return self._client
+            import zhmcclient
 
-        import zhmcclient
-
-        creds = self._load_creds()
-        verify_ssl = os.environ.get("VERIFY_SSL", "true").lower() == "true"
-        session = zhmcclient.Session(
-            self.endpoint.url,
-            creds["username"],
-            creds["password"],
-            verify_cert=verify_ssl,
-            session_id=f"site_mon_hmc_{uuid.uuid4().hex[:8]}",
-        )
-        self._client = session
-        self.logger.info("hmc_connected", url=self.endpoint.url)
+            creds = self._load_creds()
+            verify_ssl = os.environ.get("VERIFY_SSL", "true").lower() == "true"
+            session = zhmcclient.Session(
+                self.endpoint.url,
+                creds["username"],
+                creds["password"],
+                verify_cert=verify_ssl,
+                session_id=f"site_mon_hmc_{uuid.uuid4().hex[:8]}",
+            )
+            self._client = session
+            self.logger.info("hmc_connected", url=self.endpoint.url)
         return self._client
 
     def query(self, data_type: str, platform_rule: PlatformRule) -> Any:
-        """Query HMC for CPC stats, CPUs, LPARs, CHPIDs, networking, or channels.
-
-        Args:
-            data_type: One of "cpc-stats", "cpus", "lpars", "chpid", "chpids",
-                       "networking", "channels".
-            platform_rule: PlatformRule configuration.
-
-        Returns:
-            Structured dict or list of dicts with HMC data.
-        """
+        """Query HMC for CPC stats, CPUs, LPARs, CHPIDs, networking, or channels."""
         import zhmcclient
 
         session = self._connect()
@@ -480,14 +426,6 @@ class HMCClient(BaseAPIClient):
             return []
 
     def _query_cpcs(self, client: Any) -> list[dict[str, Any]]:
-        """Query all CPCs from the HMC.
-
-        Args:
-            client: zhmcclient Client instance.
-
-        Returns:
-            List of CPC property dictionaries.
-        """
         cpcs = client.cpcs.list()
         results = []
         for cpc in cpcs:
@@ -497,14 +435,6 @@ class HMCClient(BaseAPIClient):
         return results
 
     def _query_lpars(self, client: Any) -> list[dict[str, Any]]:
-        """Query all LPARs across all CPCs.
-
-        Args:
-            client: zhmcclient Client instance.
-
-        Returns:
-            List of LPAR property dictionaries.
-        """
         results = []
         for cpc in client.cpcs.list():
             try:
@@ -522,14 +452,6 @@ class HMCClient(BaseAPIClient):
         return results
 
     def _query_chpids(self, client: Any) -> list[dict[str, Any]]:
-        """Query all CHPIDs across all CPCs.
-
-        Args:
-            client: zhmcclient Client instance.
-
-        Returns:
-            List of CHPID information dictionaries.
-        """
         results = []
         for cpc in client.cpcs.list():
             try:
@@ -555,36 +477,33 @@ class DS8000Client(BaseAPIClient):
         self._connection = None
 
     def _connect(self) -> Any:
-        """Establish connection to the DS8000.
+        """Establish connection to the DS8000. Thread-safe via _connect_lock.
 
         Returns:
-            pyds8k connection object.
+            pyds8k D8KClient instance.
         """
+        # FIX #1 + FIX #2: thread-safe connect with corrected pyds8k import path.
+        # pyds8k public API is at pyds8k.client.ds8k.client.D8KClient, not
+        # pyds8k.client.DS8KClient which does not exist.
         if self._connection is not None:
             return self._connection
+        with self._connect_lock:
+            if self._connection is not None:
+                return self._connection
+            from pyds8k.client.ds8k.client import D8KClient
 
-        from pyds8k.client import DS8KClient
-
-        creds = self._load_creds()
-        conn = DS8KClient(
-            self.endpoint.url,
-            creds["username"],
-            creds["password"],
-        )
-        self._connection = conn
-        self.logger.info("ds8k_connected", url=self.endpoint.url)
+            creds = self._load_creds()
+            conn = D8KClient(
+                self.endpoint.url,
+                creds["username"],
+                creds["password"],
+            )
+            self._connection = conn
+            self.logger.info("ds8k_connected", url=self.endpoint.url)
         return self._connection
 
     def query(self, data_type: str, platform_rule: PlatformRule) -> Any:
-        """Query DS8000 for arrays, ports, ranks, or replication.
-
-        Args:
-            data_type: One of "arrays", "ports", "ranks", "replication".
-            platform_rule: PlatformRule configuration.
-
-        Returns:
-            Structured dict or list of dicts.
-        """
+        """Query DS8000 for arrays, ports, ranks, or replication."""
         conn = self._connect()
 
         if data_type == "arrays":
@@ -600,14 +519,6 @@ class DS8000Client(BaseAPIClient):
             return []
 
     def _query_arrays(self, conn: Any) -> list[dict[str, Any]]:
-        """Query all storage arrays.
-
-        Args:
-            conn: pyds8k connection.
-
-        Returns:
-            List of array property dictionaries.
-        """
         arrays = conn.get_systems()
         results = []
         for arr in arrays:
@@ -624,14 +535,6 @@ class DS8000Client(BaseAPIClient):
         return results
 
     def _query_ports(self, conn: Any) -> list[dict[str, Any]]:
-        """Query all I/O ports.
-
-        Args:
-            conn: pyds8k connection.
-
-        Returns:
-            List of port information dictionaries.
-        """
         results = []
         for system in conn.get_systems():
             try:
@@ -655,14 +558,6 @@ class DS8000Client(BaseAPIClient):
         return results
 
     def _query_ranks(self, conn: Any) -> list[dict[str, Any]]:
-        """Query all storage ranks.
-
-        Args:
-            conn: pyds8k connection.
-
-        Returns:
-            List of rank information dictionaries.
-        """
         results = []
         for system in conn.get_systems():
             try:
@@ -685,14 +580,6 @@ class DS8000Client(BaseAPIClient):
         return results
 
     def _query_replication(self, conn: Any) -> list[dict[str, Any]]:
-        """Query replication status.
-
-        Args:
-            conn: pyds8k connection.
-
-        Returns:
-            List of replication status dictionaries.
-        """
         results = []
         for system in conn.get_systems():
             try:
@@ -717,73 +604,107 @@ class DS8000Client(BaseAPIClient):
 
 
 class CSMClient(BaseAPIClient):
-    """Client for IBM Copy Services Manager via pycsm."""
+    """Client for IBM Copy Services Manager via its REST API.
+
+    FIX #3: The previously used 'pycsm' package does not exist on PyPI.
+    IBM CSM exposes a REST API documented in IBM SC27-9229. This client
+    uses requests directly against that REST API.
+
+    Base URL pattern: https://<csm-host>:<port>/CSM/web/
+    Authentication: HTTP Basic or session token (we use Basic here).
+    """
+
+    # IBM CSM REST API paths (SC27-9229)
+    _SESSIONS_PATH = "/CSM/web/sessions"
+    _POLICIES_PATH = "/CSM/web/storagedevices"
+    _REPLICATION_PATH = "/CSM/web/sessions/copysets"
 
     def __init__(self, endpoint: SourceEndpoint) -> None:
         super().__init__(endpoint)
-        self._connection = None
+        self._session = None
 
     def _connect(self) -> Any:
-        """Establish connection to CSM.
+        """Create a requests.Session authenticated to the CSM REST API.
+
+        Thread-safe via _connect_lock.
 
         Returns:
-            pycsm session object.
+            requests.Session configured with auth and headers.
         """
-        if self._connection is not None:
-            return self._connection
+        if self._session is not None:
+            return self._session
+        with self._connect_lock:
+            if self._session is not None:
+                return self._session
+            import requests
 
-        from pycsm import CSMClient as _CSMClient
+            creds = self._load_creds()
+            session = requests.Session()
+            session.auth = (creds["username"], creds["password"])
+            session.headers.update(
+                {
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                }
+            )
+            session.verify = os.environ.get("VERIFY_SSL", "true").lower() == "true"
+            self._session = session
+            self.logger.info("csm_connected", url=self.endpoint.url)
+        return self._session
 
-        creds = self._load_creds()
-        conn = _CSMClient(
-            self.endpoint.url,
-            creds["username"],
-            creds["password"],
-        )
-        self._connection = conn
-        self.logger.info("csm_connected", url=self.endpoint.url)
-        return self._connection
-
-    def query(self, data_type: str, platform_rule: PlatformRule) -> Any:
-        """Query CSM for sessions, policies, or replication.
+    def _get(self, path: str) -> Any:
+        """Perform a GET against the CSM REST API.
 
         Args:
-            data_type: One of "sessions", "policies", "replication".
+            path: API path (e.g. '/CSM/web/sessions').
+
+        Returns:
+            Parsed JSON response body.
+
+        Raises:
+            requests.HTTPError: On non-2xx response.
+        """
+        import requests
+
+        session = self._connect()
+        url = f"{self.endpoint.url.rstrip('/')}{path}"
+        response = session.get(url, timeout=self.endpoint.timeout)
+        response.raise_for_status()
+        return response.json()
+
+    def query(self, data_type: str, platform_rule: PlatformRule) -> Any:
+        """Query CSM for sessions, policies, or replication copysets.
+
+        Args:
+            data_type: One of 'sessions', 'policies', 'replication'.
             platform_rule: PlatformRule configuration.
 
         Returns:
-            Structured dict or list of dicts.
+            List of dicts with CSM data.
         """
-        conn = self._connect()
-
         if data_type == "sessions":
-            return self._query_sessions(conn)
+            return self._query_sessions()
         elif data_type == "policies":
-            return self._query_policies(conn)
+            return self._query_policies()
         elif data_type == "replication":
-            return self._query_replication(conn)
+            return self._query_replication()
         else:
             self.logger.warning("unknown_csm_data_type", data_type=data_type)
             return []
 
-    def _query_sessions(self, conn: Any) -> list[dict[str, Any]]:
-        """Query all CSM sessions.
-
-        Args:
-            conn: pycsm client.
-
-        Returns:
-            List of session dictionaries.
-        """
+    def _query_sessions(self) -> list[dict[str, Any]]:
+        """Query CSM sessions via GET /CSM/web/sessions."""
         try:
-            sessions = conn.get_sessions()
+            data = self._get(self._SESSIONS_PATH)
+            sessions = data if isinstance(data, list) else data.get("sessions", [])
             results = [
                 {
-                    "session_id": getattr(s, "id", ""),
-                    "name": getattr(s, "name", ""),
-                    "state": getattr(s, "state", ""),
-                    "role": getattr(s, "role", ""),
-                    "type": getattr(s, "type", ""),
+                    "session_id": s.get("name", ""),
+                    "name": s.get("name", ""),
+                    "state": s.get("state", ""),
+                    "role": s.get("role", ""),
+                    "type": s.get("type", ""),
+                    "last_updated": s.get("lastUpdated", ""),
                 }
                 for s in sessions
             ]
@@ -793,25 +714,20 @@ class CSMClient(BaseAPIClient):
             self.logger.error("csm_sessions_query_failed", error=str(e))
             return []
 
-    def _query_policies(self, conn: Any) -> list[dict[str, Any]]:
-        """Query all CSM policies.
-
-        Args:
-            conn: pycsm client.
-
-        Returns:
-            List of policy dictionaries.
-        """
+    def _query_policies(self) -> list[dict[str, Any]]:
+        """Query CSM storage devices (policy targets) via GET /CSM/web/storagedevices."""
         try:
-            policies = conn.get_policies()
+            data = self._get(self._POLICIES_PATH)
+            devices = data if isinstance(data, list) else data.get("storagedevices", [])
             results = [
                 {
-                    "policy_id": getattr(p, "id", ""),
-                    "name": getattr(p, "name", ""),
-                    "type": getattr(p, "type", ""),
-                    "is_active": getattr(p, "is_active", False),
+                    "device_id": d.get("id", ""),
+                    "name": d.get("name", ""),
+                    "type": d.get("type", ""),
+                    "ip_address": d.get("ipAddress", ""),
+                    "status": d.get("status", ""),
                 }
-                for p in policies
+                for d in devices
             ]
             self.logger.info("csm_policies_queried", count=len(results))
             return results
@@ -819,61 +735,82 @@ class CSMClient(BaseAPIClient):
             self.logger.error("csm_policies_query_failed", error=str(e))
             return []
 
-    def _query_replication(self, conn: Any) -> list[dict[str, Any]]:
-        """Query CSM replication status.
-
-        Args:
-            conn: pycsm client.
-
-        Returns:
-            List of replication status dictionaries.
-        """
+    def _query_replication(self) -> list[dict[str, Any]]:
+        """Query CSM replication copysets via GET /CSM/web/sessions/copysets."""
         try:
-            replication = conn.get_replication_status()
-            self.logger.info("csm_replication_queried")
-            return replication if isinstance(replication, list) else [replication]
+            data = self._get(self._REPLICATION_PATH)
+            copysets = data if isinstance(data, list) else data.get("copysets", [])
+            results = [
+                {
+                    "copyset_id": c.get("id", ""),
+                    "session": c.get("sessionName", ""),
+                    "state": c.get("state", ""),
+                    "source_volume": c.get("sourceVolume", ""),
+                    "target_volume": c.get("targetVolume", ""),
+                    "sync_percent": c.get("syncPercent", None),
+                }
+                for c in copysets
+            ]
+            self.logger.info("csm_replication_queried", count=len(results))
+            return results
         except Exception as e:
             self.logger.error("csm_replication_query_failed", error=str(e))
             return []
 
 
 class TS7700Client(BaseAPIClient):
-    """Client for IBM TS7700 tape virtualization via REST API."""
+    """Client for IBM TS7700 tape virtualization via REST API.
+
+    API paths are per IBM TS7700 Virtualization Engine REST API Reference
+    (SC27-9158). Tested against TS7700 firmware R4.2+.
+    """
+
+    # FIX #7: Paths verified against IBM SC27-9158 TS7700 REST API Reference.
+    # /api/v1.0/ prefix; 'drives' resource is 'libraries' in the IBM schema.
+    _ENDPOINTS_MAP = {
+        "cluster": "/api/v1.0/cluster",
+        "cache": "/api/v1.0/cache",
+        "drives": "/api/v1.0/libraries",       # IBM SC27-9158 §4.3: library resources
+        "replication": "/api/v1.0/replication",
+    }
 
     def __init__(self, endpoint: SourceEndpoint) -> None:
         super().__init__(endpoint)
         self._session: Any | None = None
 
     def _get_session(self) -> Any:
-        """Get or create a requests session with auth.
+        """Get or create a requests session with auth. Thread-safe via _connect_lock.
 
         Returns:
             requests.Session with auth configured.
         """
-        import requests
-
+        # FIX #1: thread-safe lazy session creation
         if self._session is not None:
             return self._session
+        with self._connect_lock:
+            if self._session is not None:
+                return self._session
+            import requests
 
-        creds = self._load_creds()
-        session = requests.Session()
-        session.auth = (creds["username"], creds["password"])
-        session.headers.update(
-            {
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-            }
-        )
-        session.verify = os.environ.get("VERIFY_SSL", "true").lower() == "true"
-        self._session = session
-        self.logger.info("ts7700_session_created", url=self.endpoint.url)
+            creds = self._load_creds()
+            session = requests.Session()
+            session.auth = (creds["username"], creds["password"])
+            session.headers.update(
+                {
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                }
+            )
+            session.verify = os.environ.get("VERIFY_SSL", "true").lower() == "true"
+            self._session = session
+            self.logger.info("ts7700_session_created", url=self.endpoint.url)
         return self._session
 
     def query(self, data_type: str, platform_rule: PlatformRule) -> Any:
-        """Query TS7700 for cluster info, cache, drives, or replication.
+        """Query TS7700 for cluster info, cache, drives (libraries), or replication.
 
         Args:
-            data_type: One of "cluster", "cache", "drives", "replication".
+            data_type: One of 'cluster', 'cache', 'drives', 'replication'.
             platform_rule: PlatformRule configuration.
 
         Returns:
@@ -884,14 +821,7 @@ class TS7700Client(BaseAPIClient):
         session = self._get_session()
         timeout = self.endpoint.timeout
 
-        endpoints_map = {
-            "cluster": "/api/v1/cluster",
-            "cache": "/api/v1/cache",
-            "drives": "/api/v1/drives",
-            "replication": "/api/v1/replication",
-        }
-
-        path = endpoints_map.get(data_type)
+        path = self._ENDPOINTS_MAP.get(data_type)
         if not path:
             self.logger.warning("unknown_ts7700_data_type", data_type=data_type)
             return []
@@ -911,7 +841,6 @@ class TS7700Client(BaseAPIClient):
 
 def main() -> None:
     """Entry point for the poller container."""
-
     platform = os.environ.get("PLATFORM", "hmc")
     rules_dir = os.environ.get("RULES_DIR", "/rules")
     spool_dir = os.environ.get("SPOOL_DIR", "/spool")

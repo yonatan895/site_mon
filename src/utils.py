@@ -19,9 +19,54 @@ from tenacity import (
     wait_exponential_jitter,
 )
 
+# FIX #6: Guard so structlog.configure() is called exactly once per process,
+# regardless of how many modules call configure_logging().
+_logging_configured = False
+_logging_lock = __import__("threading").Lock()
+
+
+def configure_logging() -> None:
+    """Configure stdlib logging and structlog once per process.
+
+    Safe to call multiple times — only the first call takes effect.
+    Call this from each module's top level (or from main()) before
+    creating any loggers.
+    """
+    global _logging_configured
+    if _logging_configured:
+        return
+    with _logging_lock:
+        if _logging_configured:
+            return
+        logging.basicConfig(
+            level=getattr(logging, os.environ.get("LOG_LEVEL", "INFO"), logging.INFO),
+            format="%(message)s",
+        )
+        structlog.configure(
+            processors=[
+                structlog.stdlib.filter_by_level,
+                structlog.stdlib.add_logger_name,
+                structlog.stdlib.add_log_level,
+                structlog.stdlib.PositionalArgumentsFormatter(),
+                structlog.processors.TimeStamper(fmt="iso"),
+                structlog.processors.StackInfoRenderer(),
+                structlog.processors.format_exc_info,
+                structlog.processors.UnicodeDecoder(),
+                structlog.processors.JSONRenderer(),
+            ],
+            context_class=dict,
+            logger_factory=structlog.stdlib.LoggerFactory(),
+            wrapper_class=structlog.stdlib.BoundLogger,
+            cache_logger_on_first_use=True,
+        )
+        _logging_configured = True
+
 
 def setup_logging(name: str) -> structlog.BoundLogger:
-    """Configure structlog with JSON rendering and return a bound logger.
+    """Backward-compatible shim: configure logging then return a bound logger.
+
+    Prefer calling configure_logging() at module top-level and then using
+    structlog.get_logger(__name__) directly for new code.
 
     Args:
         name: Logger name, typically __name__ from the calling module.
@@ -29,27 +74,7 @@ def setup_logging(name: str) -> structlog.BoundLogger:
     Returns:
         A bound structlog logger instance.
     """
-    logging.basicConfig(
-        level=getattr(logging, os.environ.get("LOG_LEVEL", "INFO"), logging.INFO),
-        format="%(message)s",
-    )
-    structlog.configure(
-        processors=[
-            structlog.stdlib.filter_by_level,
-            structlog.stdlib.add_logger_name,
-            structlog.stdlib.add_log_level,
-            structlog.stdlib.PositionalArgumentsFormatter(),
-            structlog.processors.TimeStamper(fmt="iso"),
-            structlog.processors.StackInfoRenderer(),
-            structlog.processors.format_exc_info,
-            structlog.processors.UnicodeDecoder(),
-            structlog.processors.JSONRenderer(),
-        ],
-        context_class=dict,
-        logger_factory=structlog.stdlib.LoggerFactory(),
-        wrapper_class=structlog.stdlib.BoundLogger,
-        cache_logger_on_first_use=True,
-    )
+    configure_logging()
     return structlog.get_logger(name)  # type: ignore[no-any-return]
 
 

@@ -8,9 +8,12 @@ import uuid
 from pathlib import Path
 from typing import NamedTuple
 
-from .utils import ensure_dir, setup_logging
+from .utils import configure_logging
 
-logger = setup_logging(__name__)
+configure_logging()
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 NDJSON_EXTENSION = ".ndjson"
 TEMP_EXTENSION = ".tmp"
@@ -57,6 +60,10 @@ class SpoolManager:
     Files are stored as raw NDJSON (one JSON HEC event per line).
     Retry count is embedded in the filename, avoiding any need to
     deserialize file content for tracking.
+
+    FIX #7: Spool size is maintained as an in-memory counter updated on
+    every write and delete, avoiding an O(n) directory scan on every write.
+    The counter is reconciled from disk on __init__ and after cleanup.
     """
 
     def __init__(
@@ -70,9 +77,14 @@ class SpoolManager:
         self.dead_letter_dir = (
             Path(dead_letter_dir) if dead_letter_dir else self.spool_dir / DEAD_LETTER_DIRNAME
         )
+        ensure_dir = lambda p: Path(p).mkdir(parents=True, exist_ok=True)  # noqa: E731
         ensure_dir(str(self.spool_dir))
         ensure_dir(str(self.dead_letter_dir))
         self._lock = threading.Lock()
+
+        # FIX #7: in-memory size counter — seed from disk on startup
+        self._current_size_bytes: int = self._scan_spool_size()
+
         self.reclaim_stale_processing()
 
         logger.info(
@@ -80,7 +92,7 @@ class SpoolManager:
             spool_dir=str(self.spool_dir),
             max_size_mb=max_spool_size_mb,
             dead_letter_dir=str(self.dead_letter_dir),
-            current_size_bytes=self._scan_spool_size(),
+            current_size_bytes=self._current_size_bytes,
         )
 
     def write_ndjson(self, content: str, batch_id: str = "") -> str:
@@ -100,28 +112,32 @@ class SpoolManager:
         if not content.strip():
             raise ValueError("Cannot write empty NDJSON content")
 
-        if self._get_spool_size() >= self.max_spool_size_bytes:
-            raise SpoolFullError(
-                f"Spool directory exceeds maximum size of "
-                f"{self.max_spool_size_bytes / 1024 / 1024:.0f} MB — "
-                f"back-pressure: refusing write"
-            )
+        # FIX #7: O(1) in-memory check instead of O(n) directory scan
+        with self._lock:
+            if self._current_size_bytes >= self.max_spool_size_bytes:
+                raise SpoolFullError(
+                    f"Spool directory exceeds maximum size of "
+                    f"{self.max_spool_size_bytes / 1024 / 1024:.0f} MB — "
+                    f"back-pressure: refusing write"
+                )
 
-        bid = batch_id or str(uuid.uuid4())
-        filename = _build_filename(bid)
-        filepath = self.spool_dir / filename
-        tmp_path = filepath.with_suffix(filepath.suffix + TEMP_EXTENSION)
+            bid = batch_id or str(uuid.uuid4())
+            filename = _build_filename(bid)
+            filepath = self.spool_dir / filename
+            tmp_path = filepath.with_suffix(filepath.suffix + TEMP_EXTENSION)
 
-        try:
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                f.write(content)
-                f.flush()
-                os.fsync(f.fileno())
-            os.rename(str(tmp_path), str(filepath))
-        except Exception:
-            if tmp_path.exists():
-                tmp_path.unlink(missing_ok=True)
-            raise
+            try:
+                content_bytes = content.encode("utf-8")
+                with open(tmp_path, "wb") as f:
+                    f.write(content_bytes)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.rename(str(tmp_path), str(filepath))
+                self._current_size_bytes += len(content_bytes)
+            except Exception:
+                if tmp_path.exists():
+                    tmp_path.unlink(missing_ok=True)
+                raise
 
         line_count = content.count("\n")
         logger.debug(
@@ -145,12 +161,6 @@ class SpoolManager:
 
         Files are renamed to .processing to prevent re-reading.
         Thread-safe: lock protects the list-pending + claim gap.
-
-        Args:
-            max_files: Maximum number of files to read in one batch.
-
-        Returns:
-            List of SpoolEntry (filename, raw NDJSON content, retry_count).
         """
         with self._lock:
             pending = self.list_pending()[:max_files]
@@ -190,7 +200,13 @@ class SpoolManager:
             if fp.suffix != ext:
                 fp = fp.with_suffix(ext)
             if fp.exists():
-                fp.unlink()
+                try:
+                    file_size = fp.stat().st_size
+                    fp.unlink()
+                    with self._lock:
+                        self._current_size_bytes = max(0, self._current_size_bytes - file_size)
+                except FileNotFoundError:
+                    pass
                 logger.debug("file_acknowledged", filename=str(fp))
                 return
         logger.warning("ack_file_not_found", filename=filename)
@@ -241,18 +257,17 @@ class SpoolManager:
         if not src.exists():
             return
         dst = self.dead_letter_dir / src.name
-        os.rename(str(src), str(dst))
+        try:
+            file_size = src.stat().st_size
+            os.rename(str(src), str(dst))
+            with self._lock:
+                self._current_size_bytes = max(0, self._current_size_bytes - file_size)
+        except FileNotFoundError:
+            pass
         logger.info("moved_to_dead_letter", filename=src.name)
 
     def reclaim_stale_processing(self, stale_minutes: int = 10) -> int:
-        """Reclaim stranded .processing files back to .ndjson pending state.
-
-        A .processing file untouched for > stale_minutes indicates the sender
-        crashed mid-send. Renaming back to .ndjson makes the batch retryable.
-
-        Returns:
-            Number of files reclaimed.
-        """
+        """Reclaim stranded .processing files back to .ndjson pending state."""
         cutoff = time.time() - (stale_minutes * 60)
         reclaimed = 0
         for entry in self.spool_dir.glob(f"*{PROCESSING_EXTENSION}"):
@@ -276,6 +291,7 @@ class SpoolManager:
         """Remove files older than max_age_hours from spool.
 
         Never removes .ndjson (un-sent) or .processing (in-flight) files.
+        Reconciles in-memory size counter after removal.
         """
         cutoff = time.time() - (max_age_hours * 3600)
         removed = 0
@@ -292,11 +308,15 @@ class SpoolManager:
                 pass
         if removed:
             logger.info("cleanup_completed", removed_count=removed)
+            # Reconcile counter from disk after bulk removal
+            with self._lock:
+                self._current_size_bytes = self._scan_spool_size()
         return removed
 
     def get_spool_stats(self) -> dict[str, float]:
         """Get spool directory statistics."""
-        total_size = self._get_spool_size()
+        with self._lock:
+            total_size = self._current_size_bytes
         pending = len(self.list_pending())
 
         dead_letter_count = 0
@@ -317,9 +337,11 @@ class SpoolManager:
         }
 
     def _get_spool_size(self) -> int:
-        return self._scan_spool_size()
+        with self._lock:
+            return self._current_size_bytes
 
     def _scan_spool_size(self) -> int:
+        """Full O(n) directory scan — used only on init and after bulk cleanup."""
         if not self.spool_dir.exists():
             return 0
         total = 0
